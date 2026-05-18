@@ -44,10 +44,7 @@ await build({
 });
 
 await inlineUiAssets();
-await fs.copyFile(
-  path.join(root, "manifest.json"),
-  path.join(dist, "manifest.json"),
-);
+await writeDistManifest();
 
 async function inlineUiAssets() {
   const htmlPath = path.join(dist, "plugin.html");
@@ -61,7 +58,10 @@ async function inlineUiAssets() {
   for (const match of scriptMatches) {
     const assetPath = path.join(dist, match[1].replace(/^\//, ""));
     const js = await fs.readFile(assetPath, "utf8");
-    html = html.replace(match[0], `<script>${js}</script>`);
+    html = html.replace(
+      match[0],
+      () => `<script type="module">${escapeInlineScript(js)}</script>`,
+    );
   }
 
   const cssMatches = [
@@ -70,7 +70,10 @@ async function inlineUiAssets() {
   for (const match of cssMatches) {
     const assetPath = path.join(dist, match[1].replace(/^\//, ""));
     const css = await fs.readFile(assetPath, "utf8");
-    html = html.replace(match[0], `<style>${css}</style>`);
+    html = html.replace(
+      match[0],
+      () => `<style>${escapeInlineStyle(css)}</style>`,
+    );
   }
 
   html = html.replace(
@@ -80,4 +83,33 @@ async function inlineUiAssets() {
   await fs.writeFile(path.join(dist, "ui.html"), html);
   await fs.rm(path.join(dist, "plugin.html"), { force: true });
   await fs.rm(path.join(dist, "assets"), { recursive: true, force: true });
+}
+
+async function writeDistManifest() {
+  const manifest = JSON.parse(
+    await fs.readFile(path.join(root, "manifest.json"), "utf8"),
+  );
+
+  await fs.writeFile(
+    path.join(dist, "manifest.json"),
+    `${JSON.stringify(
+      {
+        ...manifest,
+        main: "code.js",
+        ui: "ui.html",
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
+function escapeInlineScript(source) {
+  return source
+    .replace(/<\/script/gi, () => "<" + "\\/" + "script")
+    .replace(/<!--/g, () => "<" + "\\!--");
+}
+
+function escapeInlineStyle(source) {
+  return source.replace(/<\/style/gi, () => "<" + "\\/" + "style");
 }
