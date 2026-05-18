@@ -205,7 +205,7 @@ function createBaseFrame(
 ): FrameNode {
   const frame = figma.createFrame();
   frame.name = payload.title || fallbackName;
-  frame.resize?.(CHART_SIZE.width, CHART_SIZE.height);
+  if (frame.resize) frame.resize(CHART_SIZE.width, CHART_SIZE.height);
   frame.x = figma.viewport.center.x - CHART_SIZE.width / 2;
   frame.y = figma.viewport.center.y - CHART_SIZE.height / 2;
   frame.fills = [solid(COLORS.background)];
@@ -296,7 +296,7 @@ function createEditableLineChart(payload: ChartPayload): FrameNode {
       .slice(0, seriesCount)
       .map((value) => getFiniteNumber(value, 0)),
   }));
-  const niceMax = niceCeil(Math.max(...rows.flatMap((row) => row.values), 1));
+  const niceMax = niceCeil(getLargestValue(rows.map((row) => row.values)));
   const colors = PALETTES[payload.palette].map(hexToRgb);
   const frame = createBaseFrame(payload, "ChartStudio Line Chart");
   frame.name = payload.title
@@ -308,8 +308,7 @@ function createEditableLineChart(payload: ChartPayload): FrameNode {
 
     const denominator = Math.max(rows.length - 1, 1);
     for (let seriesIndex = 0; seriesIndex < seriesCount; seriesIndex += 1) {
-      const seriesName =
-        payload.seriesNames[seriesIndex] ?? `Series ${seriesIndex + 1}`;
+      const seriesName = getSeriesName(payload.seriesNames, seriesIndex);
       const points = rows.map((row, rowIndex) => {
         const value = getFiniteNumber(row.values[seriesIndex], 0);
         const x = padding.left + (plotWidth * rowIndex) / denominator;
@@ -378,7 +377,7 @@ function createEditableLineChart(payload: ChartPayload): FrameNode {
 
     return frame;
   } catch (error) {
-    frame.remove?.();
+    if (frame.remove) frame.remove();
     throw error;
   }
 }
@@ -584,7 +583,7 @@ function drawBars(
       row.values.forEach((value, seriesIndex) => {
         const barHeight = Math.max(1, (value / niceMax) * plotHeight);
         const bar = createRectangle(
-          `${row.label} · ${payload.seriesNames[seriesIndex] ?? `Series ${seriesIndex + 1}`}`,
+          `${row.label} · ${getSeriesName(payload.seriesNames, seriesIndex)}`,
           groupX,
           padding.top + plotHeight - stackedHeight - barHeight,
           usableGroupWidth,
@@ -603,8 +602,7 @@ function drawBars(
         const barHeight = Math.max(1, (value / niceMax) * plotHeight);
         const x = groupX + seriesIndex * (barWidth + barGap);
         const y = padding.top + plotHeight - barHeight;
-        const seriesLabel =
-          payload.seriesNames[seriesIndex] ?? `Series ${seriesIndex + 1}`;
+        const seriesLabel = getSeriesName(payload.seriesNames, seriesIndex);
         frame.appendChild(
           createRectangle(
             `${row.label} · ${seriesLabel}`,
@@ -871,7 +869,7 @@ function createRectangle(
   rectangle.name = name;
   rectangle.x = x;
   rectangle.y = y;
-  rectangle.resize?.(width, height);
+  if (rectangle.resize) rectangle.resize(width, height);
   rectangle.fills = [solid(color)];
   rectangle.cornerRadius = cornerRadius;
   return rectangle;
@@ -891,7 +889,7 @@ function createEllipse(
   ellipse.name = name;
   ellipse.x = x;
   ellipse.y = y;
-  ellipse.resize?.(width, height);
+  if (ellipse.resize) ellipse.resize(width, height);
   ellipse.fills = [solid(color)];
   ellipse.strokes = strokeColor ? [solid(strokeColor)] : [];
   ellipse.strokeWeight = strokeWeight;
@@ -913,7 +911,7 @@ function createText(
   text.name = characters;
   text.x = x;
   text.y = y;
-  text.resize?.(width, height);
+  if (text.resize) text.resize(width, height);
   text.fontName = fontName;
   text.fontSize = fontSize;
   text.characters = characters;
@@ -935,7 +933,7 @@ function createLine(
   line.name = name;
   line.x = x;
   line.y = y;
-  line.resize?.(length, 0);
+  if (line.resize) line.resize(length, 0);
   line.strokes = [solid(color)];
   line.strokeWeight = strokeWeight;
   return line;
@@ -1003,7 +1001,7 @@ function smoothPath(points: ChartPoint[]) {
 
 function sanitizeChartPoint(point: ChartPoint): ChartPoint {
   return {
-    ...point,
+    label: point.label,
     x: assertFiniteCoordinate(point.x, "line chart x coordinate"),
     y: assertFiniteCoordinate(point.y, "line chart y coordinate"),
     value: getFiniteNumber(point.value, 0),
@@ -1065,19 +1063,33 @@ function arcPath(
   ].join(" ");
 }
 
+function getSeriesName(seriesNames: string[], index: number): string {
+  return seriesNames[index] || `Series ${index + 1}`;
+}
+
+function getLargestValue(values: number[][]): number {
+  let maxValue = 1;
+  values.forEach((row) => {
+    row.forEach((value) => {
+      maxValue = Math.max(maxValue, Math.max(0, value));
+    });
+  });
+  return maxValue;
+}
+
 function getMaxValue(
   values: number[][],
   layout: ChartPayload["barLayout"],
 ): number {
   if (layout === "stacked") {
-    return Math.max(
-      ...values.map((row) =>
-        row.reduce((sum, value) => sum + Math.max(0, value), 0),
-      ),
-      1,
-    );
+    let maxValue = 1;
+    values.forEach((row) => {
+      const rowTotal = row.reduce((sum, value) => sum + Math.max(0, value), 0);
+      maxValue = Math.max(maxValue, rowTotal);
+    });
+    return maxValue;
   }
-  return Math.max(...values.flat().map((value) => Math.max(0, value)), 1);
+  return getLargestValue(values);
 }
 
 function niceCeil(value: number): number {
