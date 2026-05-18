@@ -19,7 +19,11 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { ChartPayload, FigmaToUiMessage } from "@/figma/types";
+import type {
+  ChartPayload,
+  FigmaToUiMessage,
+  LineStyleName,
+} from "@/figma/types";
 
 type ChartType = "line" | "bar" | "doughnut";
 type DataMode = "paste" | "manual";
@@ -97,17 +101,23 @@ const PALETTES: Record<Config["palette"], string[]> = {
 // Accessible dash patterns applied per-series when multi-series line charts are used.
 // Order follows the brand spec: Default solid, Default underline (double), Dotted, Dash 01, Dash 02.
 type LineStyle = {
+  id: LineStyleName;
   name: string;
   dash?: string; // strokeDasharray
   double?: boolean; // render two parallel strokes 1px apart
   linecap?: "round" | "butt";
 };
 const LINE_STYLES: LineStyle[] = [
-  { name: "Default", linecap: "round" },
-  { name: "Default underline", double: true, linecap: "round" },
-  { name: "Dotted", dash: "1 8", linecap: "round" },
-  { name: "Dash 01", dash: "8 8", linecap: "butt" },
-  { name: "Dash 02", dash: "24 12", linecap: "butt" },
+  { id: "default", name: "Default", linecap: "round" },
+  {
+    id: "default-underline",
+    name: "Default underline",
+    double: true,
+    linecap: "round",
+  },
+  { id: "dotted", name: "Dotted", dash: "1 8", linecap: "round" },
+  { id: "dash-01", name: "Dash 01", dash: "8 8", linecap: "butt" },
+  { id: "dash-02", name: "Dash 02", dash: "24 12", linecap: "butt" },
 ];
 
 const SERIES_LIMIT: Record<ChartType, number> = {
@@ -335,6 +345,14 @@ export function ChartStudioApp() {
       barSpacing: config.barSpacing,
       barLayout: config.barLayout,
       lineWeight: config.lineWeight,
+      lineStyles:
+        config.type === "line"
+          ? Array.from({ length: numSeries }, (_, index) =>
+              numSeries > 1
+                ? LINE_STYLES[index % LINE_STYLES.length].id
+                : LINE_STYLES[0].id,
+            )
+          : [],
       smooth: config.smooth,
       showPoints: config.showPoints,
       showPercent: config.showPercent,
