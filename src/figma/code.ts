@@ -1,4 +1,4 @@
-import type { ChartPayload, UiToFigmaMessage } from "./types";
+import type { ChartPayload, LineStyleName, UiToFigmaMessage } from "./types";
 
 type RGB = { r: number; g: number; b: number };
 type Paint = { type: "SOLID"; color: RGB; opacity?: number };
@@ -47,6 +47,7 @@ type VectorNode = SceneNode & {
   strokeWeight: number;
   vectorPaths: { windingRule: "NONZERO" | "EVENODD"; data: string }[];
   strokeCap?: "NONE" | "ROUND" | "SQUARE";
+  dashPattern?: number[];
 };
 type ChartPoint = { x: number; y: number; value: number; label: string };
 
@@ -101,6 +102,21 @@ const PALETTES: Record<ChartPayload["palette"], string[]> = {
   ],
 };
 
+const LINE_STYLES: Record<
+  LineStyleName,
+  {
+    dashPattern?: number[];
+    double?: boolean;
+    strokeCap: "NONE" | "ROUND" | "SQUARE";
+  }
+> = {
+  default: { strokeCap: "ROUND" },
+  "default-underline": { double: true, strokeCap: "ROUND" },
+  dotted: { dashPattern: [1, 8], strokeCap: "ROUND" },
+  "dash-01": { dashPattern: [8, 8], strokeCap: "NONE" },
+  "dash-02": { dashPattern: [24, 12], strokeCap: "NONE" },
+};
+
 const COLORS = {
   text: hexToRgb("#111827"),
   mutedText: hexToRgb("#6B7280"),
@@ -128,6 +144,8 @@ figma.ui.onmessage = async (message) => {
     return;
   }
 
+  let chart: FrameNode | null = null;
+
   try {
     const result = validatePayload(message.payload);
     if (!result.valid) {
@@ -142,7 +160,7 @@ figma.ui.onmessage = async (message) => {
       figma.loadFontAsync(FONT_BOLD),
     ]);
 
-    const chart = createEditableChart(message.payload);
+    chart = createEditableChart(message.payload);
     figma.currentPage.appendChild(chart);
     figma.currentPage.selection = [chart];
     figma.viewport.scrollAndZoomIntoView([chart]);
@@ -151,6 +169,7 @@ figma.ui.onmessage = async (message) => {
     );
     figma.ui.postMessage({ type: "chart-created" });
   } catch (error) {
+    if (chart?.remove) chart.remove();
     const messageText =
       error instanceof Error
         ? `Could not create ${getChartTypeLabel(message.payload.type)} chart: ${error.message}`
@@ -236,12 +255,14 @@ function createBaseFrame(
       24,
       FONT_BOLD,
       COLORS.text,
-      16,
-      14,
-      CONTENT_SIZE.width - 32,
-      30,
-      "LEFT",
+      0,
+      0,
+      CONTENT_SIZE.width,
+      32,
+      "CENTER",
     );
+    title.name = "Chart Title";
+    title.textAlignVertical = "TOP";
     setConstraints(title, "STRETCH", "MIN");
     contentFrame.appendChild(title);
   }
@@ -251,7 +272,7 @@ function createBaseFrame(
 
 function getPlotPadding(payload: ChartPayload) {
   return {
-    top: payload.title ? 64 : 36,
+    top: payload.title ? 72 : 36,
     right: 36,
     bottom: 92,
     left: 86,
@@ -358,18 +379,56 @@ function createEditableLineChart(payload: ChartPayload): FrameNode {
         return sanitizeChartPoint({ x, y, value, label: row.label });
       });
 
-      contentFrame.appendChild(
-        withConstraints(
-          createVectorPath(
-            `${seriesName} Line`,
-            payload.smooth ? smoothPath(points) : straightPath(points),
-            colors[seriesIndex % colors.length],
-            Math.max(1, getFiniteNumber(payload.lineWeight, 1)),
+      const lineStyle = getLineStyle(payload, seriesIndex, seriesCount);
+      const linePath = payload.smooth
+        ? smoothPath(points)
+        : straightPath(points);
+      const lineWeight = Math.max(1, getFiniteNumber(payload.lineWeight, 1));
+      const lineColor = colors[seriesIndex % colors.length];
+
+      if (lineStyle.double) {
+        const offset = lineWeight / 2 + 0.5;
+        contentFrame.appendChild(
+          withConstraints(
+            createVectorPath(
+              `${seriesName} Line · upper`,
+              offsetPath(linePath, -offset),
+              lineColor,
+              lineWeight,
+              lineStyle,
+            ),
+            "SCALE",
+            "SCALE",
           ),
-          "SCALE",
-          "SCALE",
-        ),
-      );
+        );
+        contentFrame.appendChild(
+          withConstraints(
+            createVectorPath(
+              `${seriesName} Line · lower`,
+              offsetPath(linePath, offset),
+              lineColor,
+              lineWeight,
+              lineStyle,
+            ),
+            "SCALE",
+            "SCALE",
+          ),
+        );
+      } else {
+        contentFrame.appendChild(
+          withConstraints(
+            createVectorPath(
+              `${seriesName} Line`,
+              linePath,
+              lineColor,
+              lineWeight,
+              lineStyle,
+            ),
+            "SCALE",
+            "SCALE",
+          ),
+        );
+      }
 
       if (payload.showPoints) {
         points.forEach((point) => {
@@ -457,7 +516,7 @@ function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
   );
   const chartX =
     payload.showLegend && payload.legendPos === "right" ? 104 : 228;
-  const chartY = payload.title ? 100 : 72;
+  const chartY = payload.title ? 112 : 72;
   const centerX = chartX + outerRadius;
   const centerY = chartY + outerRadius;
   let angle = -Math.PI / 2;
@@ -1087,6 +1146,7 @@ function createVectorPath(
   data: string,
   color: RGB,
   strokeWeight: number,
+  lineStyle = LINE_STYLES.default,
 ): VectorNode {
   const safeData = validateVectorPathData(data);
   const vector = figma.createVector();
@@ -1096,7 +1156,8 @@ function createVectorPath(
   vector.fills = [];
   vector.strokes = [solid(color)];
   vector.strokeWeight = strokeWeight;
-  vector.strokeCap = "ROUND";
+  vector.strokeCap = lineStyle.strokeCap;
+  if (lineStyle.dashPattern) vector.dashPattern = lineStyle.dashPattern;
   vector.vectorPaths = [{ windingRule: "NONZERO", data: safeData }];
   return vector;
 }
@@ -1170,10 +1231,17 @@ function formatCoordinate(value: number): string {
 
 function validateVectorPathData(data: string): string {
   if (!data.trim()) {
-    throw new Error("Line chart path is empty. Add at least two data rows.");
+    throw new Error(
+      "Vector path is empty. Check the chart data and try again.",
+    );
   }
   if (/\b(?:NaN|Infinity|null|undefined)\b/.test(data)) {
-    throw new Error("Line chart path contains an invalid coordinate.");
+    throw new Error(
+      "Vector path contains an invalid coordinate. Check the chart data and try again.",
+    );
+  }
+  if (/\bA\b/i.test(data)) {
+    throw new Error("Vector path uses an unsupported arc command.");
   }
   return data;
 }
@@ -1188,22 +1256,106 @@ function arcPath(
 ) {
   const fullCircle = end - start >= Math.PI * 2 - 0.0001;
   const adjustedEnd = fullCircle ? end - 0.0001 : end;
-  const large = adjustedEnd - start > Math.PI ? 1 : 0;
-  const x1 = cx + r * Math.cos(start);
-  const y1 = cy + r * Math.sin(start);
-  const x2 = cx + r * Math.cos(adjustedEnd);
-  const y2 = cy + r * Math.sin(adjustedEnd);
-  const x3 = cx + ir * Math.cos(adjustedEnd);
-  const y3 = cy + ir * Math.sin(adjustedEnd);
-  const x4 = cx + ir * Math.cos(start);
-  const y4 = cy + ir * Math.sin(start);
+  const outerStart = polarPoint(cx, cy, r, start);
+  const innerEnd = polarPoint(cx, cy, ir, adjustedEnd);
+
   return [
-    `M ${formatCoordinate(x1)} ${formatCoordinate(y1)}`,
-    `A ${formatCoordinate(r)} ${formatCoordinate(r)} 0 ${large} 1 ${formatCoordinate(x2)} ${formatCoordinate(y2)}`,
-    `L ${formatCoordinate(x3)} ${formatCoordinate(y3)}`,
-    `A ${formatCoordinate(ir)} ${formatCoordinate(ir)} 0 ${large} 0 ${formatCoordinate(x4)} ${formatCoordinate(y4)}`,
+    `M ${formatCoordinate(outerStart.x)} ${formatCoordinate(outerStart.y)}`,
+    cubicArcPath(cx, cy, r, start, adjustedEnd),
+    `L ${formatCoordinate(innerEnd.x)} ${formatCoordinate(innerEnd.y)}`,
+    cubicArcPath(cx, cy, ir, adjustedEnd, start),
     "Z",
-  ].join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function cubicArcPath(
+  cx: number,
+  cy: number,
+  radius: number,
+  start: number,
+  end: number,
+): string {
+  const totalDelta = end - start;
+  const segmentCount = Math.max(
+    1,
+    Math.ceil(Math.abs(totalDelta) / (Math.PI / 2)),
+  );
+  const delta = totalDelta / segmentCount;
+  const commands: string[] = [];
+
+  for (let index = 0; index < segmentCount; index += 1) {
+    const a1 = start + delta * index;
+    const a2 = a1 + delta;
+    const p0 = polarPoint(cx, cy, radius, a1);
+    const p3 = polarPoint(cx, cy, radius, a2);
+    const k = (4 / 3) * Math.tan((a2 - a1) / 4);
+    const c1 = {
+      x: p0.x - k * radius * Math.sin(a1),
+      y: p0.y + k * radius * Math.cos(a1),
+    };
+    const c2 = {
+      x: p3.x + k * radius * Math.sin(a2),
+      y: p3.y - k * radius * Math.cos(a2),
+    };
+    commands.push(
+      `C ${formatCoordinate(c1.x)} ${formatCoordinate(c1.y)} ${formatCoordinate(c2.x)} ${formatCoordinate(c2.y)} ${formatCoordinate(p3.x)} ${formatCoordinate(p3.y)}`,
+    );
+  }
+
+  return commands.join(" ");
+}
+
+function polarPoint(cx: number, cy: number, radius: number, angle: number) {
+  return {
+    x: cx + radius * Math.cos(angle),
+    y: cy + radius * Math.sin(angle),
+  };
+}
+
+function getLineStyle(
+  payload: ChartPayload,
+  seriesIndex: number,
+  seriesCount: number,
+) {
+  const payloadLineStyles = payload.lineStyles ?? [];
+  const styleNames = Object.keys(LINE_STYLES) as LineStyleName[];
+  const styleName =
+    seriesCount > 1
+      ? payloadLineStyles[seriesIndex] ||
+        styleNames[seriesIndex % styleNames.length]
+      : payloadLineStyles[0] || "default";
+  return LINE_STYLES[styleName] ?? LINE_STYLES.default;
+}
+
+function offsetPath(data: string, yOffset: number): string {
+  const tokens = data.match(/[A-Z]|-?\d+(?:\.\d+)?/g);
+  if (!tokens) return data;
+  const output: string[] = [];
+  let index = 0;
+
+  while (index < tokens.length) {
+    const command = tokens[index];
+    output.push(command);
+    index += 1;
+
+    const coordinateCount =
+      command === "C" ? 6 : command === "M" || command === "L" ? 2 : 0;
+    for (
+      let coordinateIndex = 0;
+      coordinateIndex < coordinateCount;
+      coordinateIndex += 1
+    ) {
+      const value = Number(tokens[index]);
+      output.push(
+        formatCoordinate(coordinateIndex % 2 === 1 ? value + yOffset : value),
+      );
+      index += 1;
+    }
+  }
+
+  return output.join(" ");
 }
 
 function getSeriesName(seriesNames: string[], index: number): string {

@@ -1,6 +1,12 @@
 export type ChartType = "line" | "bar" | "doughnut";
 export type NumberFormat = "currency" | "percent" | "plain";
 export type PaletteName = "finance" | "neutral" | "vibrant" | "data";
+export type LineStyleName =
+  | "default"
+  | "default-underline"
+  | "dotted"
+  | "dash-01"
+  | "dash-02";
 
 export type ChartRow = {
   label: string;
@@ -24,6 +30,7 @@ export type ChartPayload = {
   barSpacing: "compact" | "default" | "wide";
   barLayout: "grouped" | "stacked";
   lineWeight: number;
+  lineStyles: LineStyleName[];
   smooth: boolean;
   showPoints: boolean;
   showPercent: boolean;
