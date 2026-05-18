@@ -3,10 +3,12 @@ import type { ChartPayload, UiToFigmaMessage } from "./types";
 type RGB = { r: number; g: number; b: number };
 type Paint = { type: "SOLID"; color: RGB; opacity?: number };
 type FontName = { family: string; style: string };
+type ConstraintValue = "MIN" | "CENTER" | "MAX" | "STRETCH" | "SCALE";
 type SceneNode = {
   name: string;
   x: number;
   y: number;
+  constraints?: { horizontal: ConstraintValue; vertical: ConstraintValue };
   resize?: (width: number, height: number) => void;
   rotation?: number;
   appendChild?: (node: SceneNode) => void;
@@ -108,6 +110,11 @@ const COLORS = {
 };
 
 const CHART_SIZE = { width: 720, height: 460 };
+const CHART_FRAME_PADDING = 8;
+const CONTENT_SIZE = {
+  width: CHART_SIZE.width - CHART_FRAME_PADDING * 2,
+  height: CHART_SIZE.height - CHART_FRAME_PADDING * 2,
+};
 
 figma.showUI(__html__, { width: 440, height: 760, themeColors: true });
 
@@ -202,32 +209,44 @@ function createEditableChart(payload: ChartPayload): FrameNode {
 function createBaseFrame(
   payload: ChartPayload,
   fallbackName: string,
-): FrameNode {
+): { frame: FrameNode; contentFrame: FrameNode } {
   const frame = figma.createFrame();
   frame.name = payload.title || fallbackName;
   if (frame.resize) frame.resize(CHART_SIZE.width, CHART_SIZE.height);
   frame.x = figma.viewport.center.x - CHART_SIZE.width / 2;
   frame.y = figma.viewport.center.y - CHART_SIZE.height / 2;
   frame.fills = [solid(COLORS.background)];
-  frame.clipsContent = false;
+  frame.clipsContent = true;
+
+  const contentFrame = figma.createFrame();
+  contentFrame.name = "Chart content";
+  contentFrame.x = CHART_FRAME_PADDING;
+  contentFrame.y = CHART_FRAME_PADDING;
+  if (contentFrame.resize) {
+    contentFrame.resize(CONTENT_SIZE.width, CONTENT_SIZE.height);
+  }
+  contentFrame.fills = [];
+  contentFrame.clipsContent = true;
+  setConstraints(contentFrame, "STRETCH", "STRETCH");
+  frame.appendChild(contentFrame);
 
   if (payload.title) {
-    frame.appendChild(
-      createText(
-        payload.title,
-        24,
-        FONT_BOLD,
-        COLORS.text,
-        24,
-        22,
-        CHART_SIZE.width - 48,
-        30,
-        "LEFT",
-      ),
+    const title = createText(
+      payload.title,
+      24,
+      FONT_BOLD,
+      COLORS.text,
+      16,
+      14,
+      CONTENT_SIZE.width - 32,
+      30,
+      "LEFT",
     );
+    setConstraints(title, "STRETCH", "MIN");
+    contentFrame.appendChild(title);
   }
 
-  return frame;
+  return { frame, contentFrame };
 }
 
 function getPlotPadding(payload: ChartPayload) {
@@ -240,8 +259,8 @@ function getPlotPadding(payload: ChartPayload) {
 }
 
 function createEditableBarChart(payload: ChartPayload): FrameNode {
-  const width = CHART_SIZE.width;
-  const height = CHART_SIZE.height;
+  const width = CONTENT_SIZE.width;
+  const height = CONTENT_SIZE.height;
   const padding = getPlotPadding(payload);
   const plotWidth = width - padding.left - padding.right;
   const plotHeight = height - padding.top - padding.bottom;
@@ -258,14 +277,24 @@ function createEditableBarChart(payload: ChartPayload): FrameNode {
   );
   const niceMax = niceCeil(maxValue);
 
-  const frame = createBaseFrame(payload, "ChartStudio Bar Chart");
+  const { frame, contentFrame } = createBaseFrame(
+    payload,
+    "ChartStudio Bar Chart",
+  );
   frame.name = payload.title
     ? `ChartStudio Bar Chart · ${payload.title}`
     : "ChartStudio Bar Chart";
 
-  drawGridAndAxes(frame, payload, padding, plotWidth, plotHeight, niceMax);
+  drawGridAndAxes(
+    contentFrame,
+    payload,
+    padding,
+    plotWidth,
+    plotHeight,
+    niceMax,
+  );
   drawBars(
-    frame,
+    contentFrame,
     payload,
     rows,
     padding,
@@ -274,18 +303,18 @@ function createEditableBarChart(payload: ChartPayload): FrameNode {
     niceMax,
     seriesCount,
   );
-  drawAxisLabels(frame, payload, padding, plotWidth, plotHeight);
+  drawAxisLabels(contentFrame, payload, padding, plotWidth, plotHeight);
 
   if (payload.showLegend && seriesCount > 1) {
-    drawLegend(frame, payload, padding, plotWidth, height);
+    drawLegend(contentFrame, payload, padding, plotWidth, height);
   }
 
   return frame;
 }
 
 function createEditableLineChart(payload: ChartPayload): FrameNode {
-  const width = CHART_SIZE.width;
-  const height = CHART_SIZE.height;
+  const width = CONTENT_SIZE.width;
+  const height = CONTENT_SIZE.height;
   const padding = getPlotPadding(payload);
   const plotWidth = width - padding.left - padding.right;
   const plotHeight = height - padding.top - padding.bottom;
@@ -298,13 +327,23 @@ function createEditableLineChart(payload: ChartPayload): FrameNode {
   }));
   const niceMax = niceCeil(getLargestValue(rows.map((row) => row.values)));
   const colors = PALETTES[payload.palette].map(hexToRgb);
-  const frame = createBaseFrame(payload, "ChartStudio Line Chart");
+  const { frame, contentFrame } = createBaseFrame(
+    payload,
+    "ChartStudio Line Chart",
+  );
   frame.name = payload.title
     ? `ChartStudio Line Chart · ${payload.title}`
     : "ChartStudio Line Chart";
 
   try {
-    drawGridAndAxes(frame, payload, padding, plotWidth, plotHeight, niceMax);
+    drawGridAndAxes(
+      contentFrame,
+      payload,
+      padding,
+      plotWidth,
+      plotHeight,
+      niceMax,
+    );
 
     const denominator = Math.max(rows.length - 1, 1);
     for (let seriesIndex = 0; seriesIndex < seriesCount; seriesIndex += 1) {
@@ -319,41 +358,53 @@ function createEditableLineChart(payload: ChartPayload): FrameNode {
         return sanitizeChartPoint({ x, y, value, label: row.label });
       });
 
-      frame.appendChild(
-        createVectorPath(
-          `${seriesName} Line`,
-          payload.smooth ? smoothPath(points) : straightPath(points),
-          colors[seriesIndex % colors.length],
-          Math.max(1, getFiniteNumber(payload.lineWeight, 1)),
+      contentFrame.appendChild(
+        withConstraints(
+          createVectorPath(
+            `${seriesName} Line`,
+            payload.smooth ? smoothPath(points) : straightPath(points),
+            colors[seriesIndex % colors.length],
+            Math.max(1, getFiniteNumber(payload.lineWeight, 1)),
+          ),
+          "SCALE",
+          "SCALE",
         ),
       );
 
       if (payload.showPoints) {
         points.forEach((point) => {
-          frame.appendChild(
-            createEllipse(
-              `${seriesName} data point · ${point.label}`,
-              point.x - 4,
-              point.y - 4,
-              8,
-              8,
-              colors[seriesIndex % colors.length],
-              COLORS.background,
-              1.5,
+          contentFrame.appendChild(
+            withConstraints(
+              createEllipse(
+                `${seriesName} data point · ${point.label}`,
+                point.x - 4,
+                point.y - 4,
+                8,
+                8,
+                colors[seriesIndex % colors.length],
+                COLORS.background,
+                1.5,
+              ),
+              "SCALE",
+              "SCALE",
             ),
           );
           if (payload.showValues) {
-            frame.appendChild(
-              createText(
-                formatNumber(point.value, payload),
-                10,
-                FONT_MEDIUM,
-                COLORS.mutedText,
-                point.x - 30,
-                point.y - 24,
-                60,
-                14,
-                "CENTER",
+            contentFrame.appendChild(
+              withConstraints(
+                createText(
+                  formatNumber(point.value, payload),
+                  10,
+                  FONT_MEDIUM,
+                  COLORS.mutedText,
+                  point.x - 30,
+                  Math.max(0, point.y - 24),
+                  60,
+                  14,
+                  "CENTER",
+                ),
+                "SCALE",
+                "SCALE",
               ),
             );
           }
@@ -362,17 +413,17 @@ function createEditableLineChart(payload: ChartPayload): FrameNode {
     }
 
     drawXAxisCategoryLabels(
-      frame,
+      contentFrame,
       payload,
       rows,
       padding,
       plotWidth,
       plotHeight,
     );
-    drawAxisLabels(frame, payload, padding, plotWidth, plotHeight);
+    drawAxisLabels(contentFrame, payload, padding, plotWidth, plotHeight);
 
     if (payload.showLegend && seriesCount > 1) {
-      drawLegend(frame, payload, padding, plotWidth, height);
+      drawLegend(contentFrame, payload, padding, plotWidth, height);
     }
 
     return frame;
@@ -383,9 +434,12 @@ function createEditableLineChart(payload: ChartPayload): FrameNode {
 }
 
 function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
-  const width = CHART_SIZE.width;
-  const height = CHART_SIZE.height;
-  const frame = createBaseFrame(payload, "ChartStudio Doughnut Chart");
+  const width = CONTENT_SIZE.width;
+  const height = CONTENT_SIZE.height;
+  const { frame, contentFrame } = createBaseFrame(
+    payload,
+    "ChartStudio Doughnut Chart",
+  );
   frame.name = payload.title
     ? `ChartStudio Doughnut Chart · ${payload.title}`
     : "ChartStudio Doughnut Chart";
@@ -410,61 +464,77 @@ function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
 
   values.forEach((row, index) => {
     const nextAngle = angle + (row.value / total) * Math.PI * 2;
-    frame.appendChild(
-      createFilledVectorPath(
-        `Doughnut Segment ${index + 1} · ${row.label}`,
-        arcPath(centerX, centerY, outerRadius, innerRadius, angle, nextAngle),
-        colors[index % colors.length],
-        payload.segmentBorders ? COLORS.background : undefined,
-        payload.segmentBorders ? 2 : 0,
+    contentFrame.appendChild(
+      withConstraints(
+        createFilledVectorPath(
+          `Doughnut Segment ${index + 1} · ${row.label}`,
+          arcPath(centerX, centerY, outerRadius, innerRadius, angle, nextAngle),
+          colors[index % colors.length],
+          payload.segmentBorders ? COLORS.background : undefined,
+          payload.segmentBorders ? 2 : 0,
+        ),
+        "SCALE",
+        "SCALE",
       ),
     );
     angle = nextAngle;
   });
 
-  frame.appendChild(
-    createEllipse(
-      "Doughnut Center Hole",
-      centerX - innerRadius,
-      centerY - innerRadius,
-      innerRadius * 2,
-      innerRadius * 2,
-      COLORS.background,
+  contentFrame.appendChild(
+    withConstraints(
+      createEllipse(
+        "Doughnut Center Hole",
+        centerX - innerRadius,
+        centerY - innerRadius,
+        innerRadius * 2,
+        innerRadius * 2,
+        COLORS.background,
+      ),
+      "SCALE",
+      "SCALE",
     ),
   );
 
   if (payload.showValues || payload.showPercent) {
-    frame.appendChild(
-      createText(
-        payload.showPercent ? "100%" : formatNumber(total, payload),
-        22,
-        FONT_BOLD,
-        COLORS.text,
-        centerX - 48,
-        centerY - 18,
-        96,
-        24,
-        "CENTER",
+    contentFrame.appendChild(
+      withConstraints(
+        createText(
+          payload.showPercent ? "100%" : formatNumber(total, payload),
+          22,
+          FONT_BOLD,
+          COLORS.text,
+          centerX - 48,
+          centerY - 18,
+          96,
+          24,
+          "CENTER",
+        ),
+        "SCALE",
+        "SCALE",
       ),
     );
-    frame.appendChild(
-      createText(
-        "Total",
-        11,
-        FONT_REGULAR,
-        COLORS.mutedText,
-        centerX - 48,
-        centerY + 8,
-        96,
-        16,
-        "CENTER",
+    contentFrame.appendChild(
+      withConstraints(
+        createText(
+          "Total",
+          11,
+          FONT_REGULAR,
+          COLORS.mutedText,
+          centerX - 48,
+          centerY + 8,
+          96,
+          16,
+          "CENTER",
+        ),
+        "SCALE",
+        "SCALE",
       ),
     );
   }
 
   if (payload.showLegend) {
     drawDoughnutLegend(
-      frame,
+      contentFrame,
       payload,
       values,
       total,
@@ -475,7 +545,7 @@ function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
     );
   } else {
     drawDoughnutLabels(
-      frame,
+      contentFrame,
       payload,
       values,
       total,
@@ -503,53 +573,72 @@ function drawGridAndAxes(
     const y = padding.top + plotHeight - (plotHeight * index) / steps;
     if (payload.showGrid && index > 0) {
       frame.appendChild(
-        createLine(
-          `Gridline ${index}`,
-          padding.left,
-          y,
-          plotWidth,
-          COLORS.grid,
-          1,
+        withConstraints(
+          createLinePath(
+            `Gridline ${index}`,
+            padding.left,
+            y,
+            padding.left + plotWidth,
+            y,
+            COLORS.grid,
+            1,
+          ),
+          "SCALE",
+          "SCALE",
         ),
       );
     }
     if (payload.showAxisLabels) {
       frame.appendChild(
-        createText(
-          formatNumber(value, payload),
-          11,
-          FONT_REGULAR,
-          COLORS.mutedText,
-          16,
-          y - 8,
-          58,
-          16,
-          "RIGHT",
+        withConstraints(
+          createText(
+            formatNumber(value, payload),
+            11,
+            FONT_REGULAR,
+            COLORS.mutedText,
+            16,
+            y - 8,
+            58,
+            16,
+            "RIGHT",
+          ),
+          "MIN",
+          "SCALE",
         ),
       );
     }
   }
 
   frame.appendChild(
-    createLine(
-      "X axis",
-      padding.left,
-      padding.top + plotHeight,
-      plotWidth,
-      COLORS.axis,
-      1.5,
+    withConstraints(
+      createLinePath(
+        "X axis",
+        padding.left,
+        padding.top + plotHeight,
+        padding.left + plotWidth,
+        padding.top + plotHeight,
+        COLORS.axis,
+        1.5,
+      ),
+      "SCALE",
+      "SCALE",
     ),
   );
-  const yAxis = createLine(
-    "Y axis",
-    padding.left,
-    padding.top,
-    plotHeight,
-    COLORS.axis,
-    1.5,
+  frame.appendChild(
+    withConstraints(
+      createLinePath(
+        "Y axis",
+        padding.left,
+        padding.top,
+        padding.left,
+        padding.top + plotHeight,
+        COLORS.axis,
+        1.5,
+      ),
+      "SCALE",
+      "SCALE",
+    ),
   );
-  yAxis.rotation = 90;
-  frame.appendChild(yAxis);
 }
 
 function drawBars(
@@ -582,14 +671,18 @@ function drawBars(
       let stackedHeight = 0;
       row.values.forEach((value, seriesIndex) => {
         const barHeight = Math.max(1, (value / niceMax) * plotHeight);
-        const bar = createRectangle(
-          `${row.label} · ${getSeriesName(payload.seriesNames, seriesIndex)}`,
-          groupX,
-          padding.top + plotHeight - stackedHeight - barHeight,
-          usableGroupWidth,
-          barHeight,
-          colors[seriesIndex % colors.length],
-          payload.barRadius,
+        const bar = withConstraints(
+          createRectangle(
+            `${row.label} · ${getSeriesName(payload.seriesNames, seriesIndex)}`,
+            groupX,
+            padding.top + plotHeight - stackedHeight - barHeight,
+            usableGroupWidth,
+            barHeight,
+            colors[seriesIndex % colors.length],
+            payload.barRadius,
+          ),
+          "SCALE",
+          "SCALE",
         );
         frame.appendChild(bar);
         stackedHeight += barHeight;
@@ -604,28 +697,36 @@ function drawBars(
         const y = padding.top + plotHeight - barHeight;
         const seriesLabel = getSeriesName(payload.seriesNames, seriesIndex);
         frame.appendChild(
-          createRectangle(
-            `${row.label} · ${seriesLabel}`,
-            x,
-            y,
-            barWidth,
-            barHeight,
-            colors[seriesIndex % colors.length],
-            payload.barRadius,
+          withConstraints(
+            createRectangle(
+              `${row.label} · ${seriesLabel}`,
+              x,
+              y,
+              barWidth,
+              barHeight,
+              colors[seriesIndex % colors.length],
+              payload.barRadius,
+            ),
+            "SCALE",
+            "SCALE",
           ),
         );
         if (payload.showValues) {
           frame.appendChild(
-            createText(
-              formatNumber(value, payload),
-              10,
-              FONT_MEDIUM,
-              COLORS.mutedText,
-              x - 8,
-              y - 18,
-              barWidth + 16,
-              14,
-              "CENTER",
+            withConstraints(
+              createText(
+                formatNumber(value, payload),
+                10,
+                FONT_MEDIUM,
+                COLORS.mutedText,
+                x - 8,
+                Math.max(0, y - 18),
+                barWidth + 16,
+                14,
+                "CENTER",
+              ),
+              "SCALE",
+              "SCALE",
             ),
           );
         }
@@ -634,16 +735,20 @@ function drawBars(
 
     if (payload.showAxisLabels) {
       frame.appendChild(
-        createText(
-          row.label,
-          11,
-          FONT_REGULAR,
-          COLORS.mutedText,
-          padding.left + rowIndex * groupWidth,
-          padding.top + plotHeight + 10,
-          groupWidth,
-          18,
-          "CENTER",
+        withConstraints(
+          createText(
+            row.label,
+            11,
+            FONT_REGULAR,
+            COLORS.mutedText,
+            padding.left + rowIndex * groupWidth,
+            padding.top + plotHeight + 10,
+            groupWidth,
+            18,
+            "CENTER",
+          ),
+          "SCALE",
+          "SCALE",
         ),
       );
     }
@@ -662,16 +767,20 @@ function drawXAxisCategoryLabels(
   const denominator = Math.max(rows.length - 1, 1);
   rows.forEach((row, rowIndex) => {
     frame.appendChild(
-      createText(
-        row.label,
-        11,
-        FONT_REGULAR,
-        COLORS.mutedText,
-        padding.left + (plotWidth * rowIndex) / denominator - 36,
-        padding.top + plotHeight + 10,
-        72,
-        18,
-        "CENTER",
+      withConstraints(
+        createText(
+          row.label,
+          11,
+          FONT_REGULAR,
+          COLORS.mutedText,
+          padding.left + (plotWidth * rowIndex) / denominator - 36,
+          padding.top + plotHeight + 10,
+          72,
+          18,
+          "CENTER",
+        ),
+        "SCALE",
+        "SCALE",
       ),
     );
   });
@@ -856,6 +965,23 @@ function drawDoughnutLabels(
   });
 }
 
+function setConstraints(
+  node: SceneNode,
+  horizontal: ConstraintValue,
+  vertical: ConstraintValue,
+): void {
+  node.constraints = { horizontal, vertical };
+}
+
+function withConstraints<T extends SceneNode>(
+  node: T,
+  horizontal: ConstraintValue,
+  vertical: ConstraintValue,
+): T {
+  setConstraints(node, horizontal, vertical);
+  return node;
+}
+
 function createRectangle(
   name: string,
   x: number,
@@ -937,6 +1063,23 @@ function createLine(
   line.strokes = [solid(color)];
   line.strokeWeight = strokeWeight;
   return line;
+}
+
+function createLinePath(
+  name: string,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  color: RGB,
+  strokeWeight: number,
+): VectorNode {
+  return createVectorPath(
+    name,
+    `M ${formatCoordinate(x1)} ${formatCoordinate(y1)} L ${formatCoordinate(x2)} ${formatCoordinate(y2)}`,
+    color,
+    strokeWeight,
+  );
 }
 
 function createVectorPath(
