@@ -10,6 +10,7 @@ type SceneNode = {
   resize?: (width: number, height: number) => void;
   rotation?: number;
   appendChild?: (node: SceneNode) => void;
+  remove?: () => void;
 };
 type FrameNode = SceneNode & {
   fills: Paint[];
@@ -45,6 +46,7 @@ type VectorNode = SceneNode & {
   vectorPaths: { windingRule: "NONZERO" | "EVENODD"; data: string }[];
   strokeCap?: "NONE" | "ROUND" | "SQUARE";
 };
+type ChartPoint = { x: number; y: number; value: number; label: string };
 
 type FigmaPluginApi = {
   showUI: (
@@ -246,7 +248,9 @@ function createEditableBarChart(payload: ChartPayload): FrameNode {
   const seriesCount = Math.max(1, payload.seriesNames.length);
   const rows = payload.rows.map((row) => ({
     label: row.label,
-    values: row.values.slice(0, seriesCount).map((value) => Number(value) || 0),
+    values: row.values
+      .slice(0, seriesCount)
+      .map((value) => getFiniteNumber(value, 0)),
   }));
   const maxValue = getMaxValue(
     rows.map((row) => row.values),
@@ -288,7 +292,9 @@ function createEditableLineChart(payload: ChartPayload): FrameNode {
   const seriesCount = Math.max(1, payload.seriesNames.length);
   const rows = payload.rows.map((row) => ({
     label: row.label,
-    values: row.values.slice(0, seriesCount).map((value) => Number(value) || 0),
+    values: row.values
+      .slice(0, seriesCount)
+      .map((value) => getFiniteNumber(value, 0)),
   }));
   const niceMax = niceCeil(Math.max(...rows.flatMap((row) => row.values), 1));
   const colors = PALETTES[payload.palette].map(hexToRgb);
@@ -297,70 +303,84 @@ function createEditableLineChart(payload: ChartPayload): FrameNode {
     ? `ChartStudio Line Chart · ${payload.title}`
     : "ChartStudio Line Chart";
 
-  drawGridAndAxes(frame, payload, padding, plotWidth, plotHeight, niceMax);
+  try {
+    drawGridAndAxes(frame, payload, padding, plotWidth, plotHeight, niceMax);
 
-  const denominator = Math.max(rows.length - 1, 1);
-  for (let seriesIndex = 0; seriesIndex < seriesCount; seriesIndex += 1) {
-    const seriesName =
-      payload.seriesNames[seriesIndex] ?? `Series ${seriesIndex + 1}`;
-    const points = rows.map((row, rowIndex) => {
-      const x = padding.left + (plotWidth * rowIndex) / denominator;
-      const y =
-        padding.top +
-        plotHeight -
-        (Math.max(0, row.values[seriesIndex] ?? 0) / niceMax) * plotHeight;
-      return { x, y, value: row.values[seriesIndex] ?? 0, label: row.label };
-    });
-    frame.appendChild(
-      createVectorPath(
-        `${seriesName} Line`,
-        payload.smooth ? smoothPath(points) : straightPath(points),
-        colors[seriesIndex % colors.length],
-        Math.max(1, payload.lineWeight),
-      ),
-    );
+    const denominator = Math.max(rows.length - 1, 1);
+    for (let seriesIndex = 0; seriesIndex < seriesCount; seriesIndex += 1) {
+      const seriesName =
+        payload.seriesNames[seriesIndex] ?? `Series ${seriesIndex + 1}`;
+      const points = rows.map((row, rowIndex) => {
+        const value = getFiniteNumber(row.values[seriesIndex], 0);
+        const x = padding.left + (plotWidth * rowIndex) / denominator;
+        const y =
+          padding.top +
+          plotHeight -
+          (Math.max(0, value) / niceMax) * plotHeight;
+        return sanitizeChartPoint({ x, y, value, label: row.label });
+      });
 
-    if (payload.showPoints) {
-      points.forEach((point) => {
-        frame.appendChild(
-          createEllipse(
-            `${seriesName} data point · ${point.label}`,
-            point.x - 4,
-            point.y - 4,
-            8,
-            8,
-            colors[seriesIndex % colors.length],
-            COLORS.background,
-            1.5,
-          ),
-        );
-        if (payload.showValues) {
+      frame.appendChild(
+        createVectorPath(
+          `${seriesName} Line`,
+          payload.smooth ? smoothPath(points) : straightPath(points),
+          colors[seriesIndex % colors.length],
+          Math.max(1, getFiniteNumber(payload.lineWeight, 1)),
+        ),
+      );
+
+      if (payload.showPoints) {
+        points.forEach((point) => {
           frame.appendChild(
-            createText(
-              formatNumber(point.value, payload),
-              10,
-              FONT_MEDIUM,
-              COLORS.mutedText,
-              point.x - 30,
-              point.y - 24,
-              60,
-              14,
-              "CENTER",
+            createEllipse(
+              `${seriesName} data point · ${point.label}`,
+              point.x - 4,
+              point.y - 4,
+              8,
+              8,
+              colors[seriesIndex % colors.length],
+              COLORS.background,
+              1.5,
             ),
           );
-        }
-      });
+          if (payload.showValues) {
+            frame.appendChild(
+              createText(
+                formatNumber(point.value, payload),
+                10,
+                FONT_MEDIUM,
+                COLORS.mutedText,
+                point.x - 30,
+                point.y - 24,
+                60,
+                14,
+                "CENTER",
+              ),
+            );
+          }
+        });
+      }
     }
+
+    drawXAxisCategoryLabels(
+      frame,
+      payload,
+      rows,
+      padding,
+      plotWidth,
+      plotHeight,
+    );
+    drawAxisLabels(frame, payload, padding, plotWidth, plotHeight);
+
+    if (payload.showLegend && seriesCount > 1) {
+      drawLegend(frame, payload, padding, plotWidth, height);
+    }
+
+    return frame;
+  } catch (error) {
+    frame.remove?.();
+    throw error;
   }
-
-  drawXAxisCategoryLabels(frame, payload, rows, padding, plotWidth, plotHeight);
-  drawAxisLabels(frame, payload, padding, plotWidth, plotHeight);
-
-  if (payload.showLegend && seriesCount > 1) {
-    drawLegend(frame, payload, padding, plotWidth, height);
-  }
-
-  return frame;
 }
 
 function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
@@ -927,6 +947,7 @@ function createVectorPath(
   color: RGB,
   strokeWeight: number,
 ): VectorNode {
+  const safeData = validateVectorPathData(data);
   const vector = figma.createVector();
   vector.name = name;
   vector.x = 0;
@@ -935,7 +956,7 @@ function createVectorPath(
   vector.strokes = [solid(color)];
   vector.strokeWeight = strokeWeight;
   vector.strokeCap = "ROUND";
-  vector.vectorPaths = [{ windingRule: "NONZERO", data }];
+  vector.vectorPaths = [{ windingRule: "NONZERO", data: safeData }];
   return vector;
 }
 
@@ -946,6 +967,7 @@ function createFilledVectorPath(
   strokeColor?: RGB,
   strokeWeight = 0,
 ): VectorNode {
+  const safeData = validateVectorPathData(data);
   const vector = figma.createVector();
   vector.name = name;
   vector.x = 0;
@@ -953,27 +975,66 @@ function createFilledVectorPath(
   vector.fills = [solid(fillColor)];
   vector.strokes = strokeColor ? [solid(strokeColor)] : [];
   vector.strokeWeight = strokeWeight;
-  vector.vectorPaths = [{ windingRule: "EVENODD", data }];
+  vector.vectorPaths = [{ windingRule: "EVENODD", data: safeData }];
   return vector;
 }
 
-function straightPath(points: { x: number; y: number }[]) {
+function straightPath(points: ChartPoint[]) {
   if (!points.length) return "";
   return points
-    .map((point, index) => `${index === 0 ? "M" : "L"}${point.x},${point.y}`)
+    .map(
+      (point, index) =>
+        `${index === 0 ? "M" : "L"} ${formatCoordinate(point.x)} ${formatCoordinate(point.y)}`,
+    )
     .join(" ");
 }
 
-function smoothPath(points: { x: number; y: number }[]) {
+function smoothPath(points: ChartPoint[]) {
   if (!points.length) return "";
-  let d = `M${points[0].x},${points[0].y}`;
+  let d = `M ${formatCoordinate(points[0].x)} ${formatCoordinate(points[0].y)}`;
   for (let index = 0; index < points.length - 1; index += 1) {
     const current = points[index];
     const next = points[index + 1];
     const controlX = (current.x + next.x) / 2;
-    d += ` C${controlX},${current.y} ${controlX},${next.y} ${next.x},${next.y}`;
+    d += ` C ${formatCoordinate(controlX)} ${formatCoordinate(current.y)} ${formatCoordinate(controlX)} ${formatCoordinate(next.y)} ${formatCoordinate(next.x)} ${formatCoordinate(next.y)}`;
   }
   return d;
+}
+
+function sanitizeChartPoint(point: ChartPoint): ChartPoint {
+  return {
+    ...point,
+    x: assertFiniteCoordinate(point.x, "line chart x coordinate"),
+    y: assertFiniteCoordinate(point.y, "line chart y coordinate"),
+    value: getFiniteNumber(point.value, 0),
+  };
+}
+
+function getFiniteNumber(value: unknown, fallback: number): number {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : fallback;
+}
+
+function assertFiniteCoordinate(value: number, label: string): number {
+  if (!Number.isFinite(value)) {
+    throw new Error(`Invalid ${label}. Check the chart data and try again.`);
+  }
+  return value;
+}
+
+function formatCoordinate(value: number): string {
+  assertFiniteCoordinate(value, "vector path coordinate");
+  return Number(value.toFixed(2)).toString();
+}
+
+function validateVectorPathData(data: string): string {
+  if (!data.trim()) {
+    throw new Error("Line chart path is empty. Add at least two data rows.");
+  }
+  if (/\b(?:NaN|Infinity|null|undefined)\b/.test(data)) {
+    throw new Error("Line chart path contains an invalid coordinate.");
+  }
+  return data;
 }
 
 function arcPath(
@@ -995,7 +1056,13 @@ function arcPath(
   const y3 = cy + ir * Math.sin(adjustedEnd);
   const x4 = cx + ir * Math.cos(start);
   const y4 = cy + ir * Math.sin(start);
-  return `M${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} L${x3},${y3} A${ir},${ir} 0 ${large} 0 ${x4},${y4} Z`;
+  return [
+    `M ${formatCoordinate(x1)} ${formatCoordinate(y1)}`,
+    `A ${formatCoordinate(r)} ${formatCoordinate(r)} 0 ${large} 1 ${formatCoordinate(x2)} ${formatCoordinate(y2)}`,
+    `L ${formatCoordinate(x3)} ${formatCoordinate(y3)}`,
+    `A ${formatCoordinate(ir)} ${formatCoordinate(ir)} 0 ${large} 0 ${formatCoordinate(x4)} ${formatCoordinate(y4)}`,
+    "Z",
+  ].join(" ");
 }
 
 function getMaxValue(
