@@ -1,3 +1,4 @@
+import { getDoughnutPatternType } from "../lib/doughnut-patterns";
 import type {
   ChartOutputSize,
   ChartPayload,
@@ -135,17 +136,6 @@ const PALETTES: Record<ChartPayload["palette"], string[]> = {
     "#449DC4",
   ],
 };
-
-const DOUGHNUT_PATTERN_TYPES = [
-  "solid",
-  "hatch",
-  "hatch-reverse",
-  "dot",
-  "cross-hatch",
-  "grid",
-  "dot-condensed",
-] as const;
-type DoughnutPatternType = (typeof DOUGHNUT_PATTERN_TYPES)[number];
 
 const LINE_STYLES: Record<
   LineStyleName,
@@ -868,7 +858,7 @@ function appendDoughnutPattern(
   startAngle: number,
   endAngle: number,
 ) {
-  const style = DOUGHNUT_PATTERN_TYPES[index % DOUGHNUT_PATTERN_TYPES.length];
+  const style = getDoughnutPatternType(index);
   const stroke = hexToRgb("#281805");
   if (style === "solid") return;
   const span = Math.max(0.2, endAngle - startAngle);
@@ -924,7 +914,7 @@ function appendLegendPattern(
   h: number,
 ) {
   const stroke = hexToRgb("#281805");
-  const style = DOUGHNUT_PATTERN_TYPES[index % DOUGHNUT_PATTERN_TYPES.length];
+  const style = getDoughnutPatternType(index);
   if (style === "solid") return;
   if (style.includes("hatch") || style === "grid") {
     for (let i = 0; i < 4; i += 1) {
