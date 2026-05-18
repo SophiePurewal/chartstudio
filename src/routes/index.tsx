@@ -20,13 +20,16 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
+  ChartOutputSize,
   ChartPayload,
+  ChartSizePreset,
   FigmaToUiMessage,
   LineStyleName,
 } from "@/figma/types";
 
 type ChartType = "line" | "bar" | "doughnut";
 type DataMode = "paste" | "manual";
+type CustomSizeField = "width" | "height";
 
 // A row = one category with N parallel values (one per series)
 type Row = { label: string; values: string[] };
@@ -63,7 +66,31 @@ type Config = {
   innerRadius: number;
   legendPos: "right" | "bottom";
   segmentBorders: boolean;
+  chartSizePreset: ChartSizePreset;
+  customWidth: string;
+  customHeight: string;
+  lockAspectRatio: boolean;
 };
+
+const CHART_SIZE_OPTIONS: {
+  id: ChartSizePreset;
+  label: string;
+  width: number;
+  height: number;
+}[] = [
+  { id: "desktop-12", label: "Desktop 12 column", width: 1064, height: 608 },
+  { id: "desktop-10", label: "Desktop 10 column", width: 872, height: 496 },
+  { id: "desktop-8", label: "Desktop 8 column", width: 680, height: 392 },
+  { id: "tablet-12", label: "Tablet 12 column", width: 632, height: 360 },
+  { id: "mobile-4", label: "Mobile 4 column", width: 351, height: 200 },
+  { id: "custom", label: "Custom size", width: 680, height: 392 },
+];
+const DEFAULT_CHART_SIZE = CHART_SIZE_OPTIONS.find(
+  (size) => size.id === "desktop-8",
+)!;
+const MIN_CUSTOM_WIDTH = 320;
+const MIN_CUSTOM_HEIGHT = 180;
+const LOCKED_ASPECT_RATIO = 1.75;
 
 const SAMPLE: Record<ChartType, string> = {
   line: "Month, Revenue, Costs\nJan, 12400, 8200\nFeb, 13800, 8900\nMar, 15200, 9400\nApr, 14600, 9100\nMay, 16100, 9800\nJun, 17500, 10200",
@@ -155,7 +182,77 @@ const initial: Config = {
   innerRadius: 55,
   legendPos: "right",
   segmentBorders: true,
+  chartSizePreset: "desktop-8",
+  customWidth: String(DEFAULT_CHART_SIZE.width),
+  customHeight: String(DEFAULT_CHART_SIZE.height),
+  lockAspectRatio: true,
 };
+
+function getSelectedChartSize(config: Config): ChartOutputSize {
+  if (config.chartSizePreset !== "custom") {
+    const preset =
+      CHART_SIZE_OPTIONS.find((size) => size.id === config.chartSizePreset) ??
+      DEFAULT_CHART_SIZE;
+    return { preset: preset.id, width: preset.width, height: preset.height };
+  }
+
+  return {
+    preset: "custom",
+    width: Number(config.customWidth),
+    height: Number(config.customHeight),
+  };
+}
+
+function getChartSizeSummary(config: Config): string {
+  const size = getSelectedChartSize(config);
+  const label =
+    CHART_SIZE_OPTIONS.find((option) => option.id === size.preset)?.label ??
+    "Custom";
+  return `${label.replace(" size", "")} · ${Math.round(size.width)} × ${Math.round(size.height)}`;
+}
+
+function getChartSizeValidation(config: Config): string | null {
+  if (config.chartSizePreset !== "custom") return null;
+  const width = Number(config.customWidth);
+  const height = Number(config.customHeight);
+  if (
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    return "Enter a positive width and height for your custom chart size.";
+  }
+  if (width < MIN_CUSTOM_WIDTH || height < MIN_CUSTOM_HEIGHT) {
+    return `Custom charts must be at least ${MIN_CUSTOM_WIDTH}px wide and ${MIN_CUSTOM_HEIGHT}px tall.`;
+  }
+  return null;
+}
+
+function updateCustomChartSize(
+  config: Config,
+  field: CustomSizeField,
+  value: string,
+): Partial<Config> {
+  const patch: Partial<Config> =
+    field === "width" ? { customWidth: value } : { customHeight: value };
+  if (!config.lockAspectRatio) return patch;
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue) || numberValue <= 0) return patch;
+  if (field === "width") {
+    patch.customHeight = String(
+      Math.max(
+        MIN_CUSTOM_HEIGHT,
+        Math.round(numberValue / LOCKED_ASPECT_RATIO),
+      ),
+    );
+  } else {
+    patch.customWidth = String(
+      Math.max(MIN_CUSTOM_WIDTH, Math.round(numberValue * LOCKED_ASPECT_RATIO)),
+    );
+  }
+  return patch;
+}
 
 /** Parse pasted CSV/TSV → rows + series names. First line treated as header if its
  * value columns aren't numeric. */
@@ -287,9 +384,12 @@ export function ChartStudioApp() {
       ? ["Type", "Data", "Labels & Legend", "Style", "Insert"]
       : ["Type", "Data", "Labels", "Style", "Insert"];
 
+  const sizeValidationMessage = getChartSizeValidation(config);
+
   const canNext = () => {
     if (step === 1) return !!config.type;
     if (step === 2) return dataPoints.length >= 2;
+    if (step === 4) return !sizeValidationMessage;
     return true;
   };
 
@@ -334,6 +434,12 @@ export function ChartStudioApp() {
       return;
     }
 
+    const sizeValidation = getChartSizeValidation(config);
+    if (sizeValidation) {
+      setInsertError(sizeValidation);
+      return;
+    }
+
     const payload: ChartPayload = {
       type: config.type,
       rows: dataPoints,
@@ -366,6 +472,7 @@ export function ChartStudioApp() {
       legendPos: config.legendPos,
       segmentBorders: config.segmentBorders,
       palette: config.palette,
+      chartSize: getSelectedChartSize(config),
     };
 
     setInserting(true);
@@ -453,7 +560,12 @@ export function ChartStudioApp() {
             )}
             {step === 3 && <Screen3 config={config} update={update} />}
             {step === 4 && (
-              <Screen4 config={config} update={update} numSeries={numSeries} />
+              <Screen4
+                config={config}
+                update={update}
+                numSeries={numSeries}
+                sizeValidationMessage={sizeValidationMessage}
+              />
             )}
             {step === 5 && (
               <Screen5
@@ -465,6 +577,7 @@ export function ChartStudioApp() {
                 insertError={insertError}
                 onEdit={editInsertedChart}
                 onAnother={reset}
+                sizeValidationMessage={sizeValidationMessage}
               />
             )}
           </main>
@@ -499,7 +612,7 @@ export function ChartStudioApp() {
               ) : (
                 <button
                   onClick={insert}
-                  disabled={inserting}
+                  disabled={inserting || !!sizeValidationMessage}
                   className="h-8 px-3.5 inline-flex items-center gap-1.5 text-[12px] font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
                 >
                   {inserting ? (
@@ -1143,10 +1256,12 @@ function Screen4({
   config,
   update,
   numSeries,
+  sizeValidationMessage,
 }: {
   config: Config;
   update: (p: Partial<Config>) => void;
   numSeries: number;
+  sizeValidationMessage: string | null;
 }) {
   const [adv, setAdv] = useState(false);
 
@@ -1155,6 +1270,58 @@ function Screen4({
       title="Style"
       subtitle="Tweak the essentials. Preview updates as you go."
     >
+      <Group label="Output size">
+        <Field label="Chart size">
+          <Select
+            value={config.chartSizePreset}
+            options={CHART_SIZE_OPTIONS.map((option) => option.id)}
+            getLabel={(value) =>
+              CHART_SIZE_OPTIONS.find((option) => option.id === value)?.label ??
+              value
+            }
+            onChange={(v) => update({ chartSizePreset: v as ChartSizePreset })}
+          />
+        </Field>
+        <p className="text-[11px] text-muted-foreground">
+          {getChartSizeSummary(config)}
+        </p>
+        {config.chartSizePreset === "custom" && (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Width">
+                <Input
+                  value={config.customWidth}
+                  onChange={(v) =>
+                    update(updateCustomChartSize(config, "width", v))
+                  }
+                  placeholder="900"
+                />
+              </Field>
+              <Field label="Height">
+                <Input
+                  value={config.customHeight}
+                  onChange={(v) =>
+                    update(updateCustomChartSize(config, "height", v))
+                  }
+                  placeholder="514"
+                />
+              </Field>
+            </div>
+            <Toggle
+              label="Lock aspect ratio at 1.75:1"
+              value={config.lockAspectRatio}
+              onChange={(v) => update({ lockAspectRatio: v })}
+            />
+            {sizeValidationMessage ? (
+              <Banner tone="error">{sizeValidationMessage}</Banner>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">
+                Custom charts use the exact width and height entered.
+              </p>
+            )}
+          </div>
+        )}
+      </Group>
       {(config.type === "line" || config.type === "bar") && (
         <Group label="Color palette">
           <Segmented
@@ -1425,6 +1592,7 @@ function Screen5({
   insertError,
   onEdit,
   onAnother,
+  sizeValidationMessage,
 }: {
   config: Config;
   dataPoints: Row[];
@@ -1434,6 +1602,7 @@ function Screen5({
   insertError: string | null;
   onEdit: () => void;
   onAnother: () => void;
+  sizeValidationMessage: string | null;
 }) {
   return (
     <Section
@@ -1474,6 +1643,7 @@ function Screen5({
             v={`X: ${config.xLabel || "—"}, Y: ${config.yLabel || "—"}`}
           />
         )}
+        <SummaryRow k="Chart size" v={getChartSizeSummary(config)} />
         <SummaryRow
           k="Format"
           v={
@@ -1485,6 +1655,14 @@ function Screen5({
           }
         />
       </div>
+
+      {sizeValidationMessage && (
+        <div className="mt-3">
+          <Banner tone="error" title="Check custom size">
+            {sizeValidationMessage}
+          </Banner>
+        </div>
+      )}
 
       {insertError && (
         <div className="mt-3">
@@ -2254,10 +2432,12 @@ function Select({
   value,
   options,
   onChange,
+  getLabel,
 }: {
   value: string;
   options: string[];
   onChange?: (v: string) => void;
+  getLabel?: (v: string) => string;
 }) {
   return (
     <div className="relative">
@@ -2268,7 +2448,7 @@ function Select({
       >
         {options.map((o) => (
           <option key={o} value={o}>
-            {o}
+            {getLabel ? getLabel(o) : o}
           </option>
         ))}
       </select>

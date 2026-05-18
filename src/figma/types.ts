@@ -1,6 +1,19 @@
 export type ChartType = "line" | "bar" | "doughnut";
 export type NumberFormat = "currency" | "percent" | "plain";
 export type PaletteName = "finance" | "neutral" | "vibrant" | "data";
+export type ChartSizePreset =
+  | "desktop-12"
+  | "desktop-10"
+  | "desktop-8"
+  | "tablet-12"
+  | "mobile-4"
+  | "custom";
+
+export type ChartOutputSize = {
+  preset: ChartSizePreset;
+  width: number;
+  height: number;
+};
 export type LineStyleName =
   | "default"
   | "default-underline"
@@ -38,6 +51,7 @@ export type ChartPayload = {
   legendPos: "right" | "bottom";
   segmentBorders: boolean;
   palette: PaletteName;
+  chartSize: ChartOutputSize;
 };
 
 export type BarChartPayload = ChartPayload;

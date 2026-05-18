@@ -1,4 +1,9 @@
-import type { ChartPayload, LineStyleName, UiToFigmaMessage } from "./types";
+import type {
+  ChartOutputSize,
+  ChartPayload,
+  LineStyleName,
+  UiToFigmaMessage,
+} from "./types";
 
 type RGB = { r: number; g: number; b: number };
 type Paint = { type: "SOLID"; color: RGB; opacity?: number };
@@ -132,11 +137,48 @@ const TEXT_STYLES = {
   axisTitle: { fontSize: 14, lineHeight: 18, font: FONT_REGULAR },
 };
 
-const CHART_SIZE = { width: 720, height: 460 };
+const CHART_SIZE_PRESETS: Record<
+  Exclude<ChartOutputSize["preset"], "custom">,
+  { label: string; width: number; height: number }
+> = {
+  "desktop-12": { label: "Desktop 12 column", width: 1064, height: 608 },
+  "desktop-10": { label: "Desktop 10 column", width: 872, height: 496 },
+  "desktop-8": { label: "Desktop 8 column", width: 680, height: 392 },
+  "tablet-12": { label: "Tablet 12 column", width: 632, height: 360 },
+  "mobile-4": { label: "Mobile 4 column", width: 351, height: 200 },
+};
+const DEFAULT_CHART_SIZE: ChartOutputSize = {
+  preset: "desktop-8",
+  width: CHART_SIZE_PRESETS["desktop-8"].width,
+  height: CHART_SIZE_PRESETS["desktop-8"].height,
+};
+const MIN_CUSTOM_WIDTH = 320;
+const MIN_CUSTOM_HEIGHT = 180;
 const CHART_FRAME_PADDING = 8;
-const CONTENT_SIZE = {
-  width: CHART_SIZE.width - CHART_FRAME_PADDING * 2,
-  height: CHART_SIZE.height - CHART_FRAME_PADDING * 2,
+const GRID = 8;
+
+type ChartLayout = {
+  outerWidth: number;
+  outerHeight: number;
+  contentWidth: number;
+  contentHeight: number;
+  cartesian: {
+    padding: { top: number; left: number; bottom: number; right: number };
+    plotWidth: number;
+    plotHeight: number;
+    legendY: number;
+    legendHeight: number;
+  };
+  doughnut: {
+    chartX: number;
+    chartY: number;
+    squareSize: number;
+    legendX: number;
+    legendY: number;
+    legendWidth: number;
+    legendHeight: number;
+    legendColumns: number;
+  };
 };
 
 figma.showUI(__html__, { width: 440, height: 760, themeColors: true });
@@ -210,6 +252,9 @@ function validatePayload(
       message: "Every row needs at least one numeric value.",
     };
   }
+  const sizeValidation = validateChartSize(payload.chartSize);
+  if (!sizeValidation.valid) return sizeValidation;
+
   if (payload.type === "doughnut") {
     const values = payload.rows.map((row) => Number(row.values[0]) || 0);
     if (values.some((value) => value < 0)) {
@@ -232,15 +277,155 @@ function createEditableChart(payload: ChartPayload): FrameNode {
   throw new Error("Unsupported chart type.");
 }
 
+function resolveChartSize(size?: ChartOutputSize): ChartOutputSize {
+  if (!size) return DEFAULT_CHART_SIZE;
+  if (size.preset !== "custom") {
+    const preset =
+      CHART_SIZE_PRESETS[size.preset] ?? CHART_SIZE_PRESETS["desktop-8"];
+    return { preset: size.preset, width: preset.width, height: preset.height };
+  }
+  return {
+    preset: "custom",
+    width: Math.round(Number(size.width)),
+    height: Math.round(Number(size.height)),
+  };
+}
+
+function validateChartSize(
+  size?: ChartOutputSize,
+): { valid: true } | { valid: false; message: string } {
+  const resolved = resolveChartSize(size);
+  if (!Number.isFinite(resolved.width) || !Number.isFinite(resolved.height)) {
+    return { valid: false, message: "Enter a valid chart width and height." };
+  }
+  if (resolved.width < MIN_CUSTOM_WIDTH) {
+    return {
+      valid: false,
+      message: `Chart width must be at least ${MIN_CUSTOM_WIDTH}px.`,
+    };
+  }
+  if (resolved.height < MIN_CUSTOM_HEIGHT) {
+    return {
+      valid: false,
+      message: `Chart height must be at least ${MIN_CUSTOM_HEIGHT}px.`,
+    };
+  }
+  return { valid: true };
+}
+
+function createChartLayout(payload: ChartPayload): ChartLayout {
+  const size = resolveChartSize(payload.chartSize);
+  const contentWidth = size.width - CHART_FRAME_PADDING * 2;
+  const contentHeight = size.height - CHART_FRAME_PADDING * 2;
+  const compact = size.width <= 420 || size.height <= 240;
+  const hasLegend = payload.showLegend;
+  const cartesianPadding = {
+    top: payload.title ? (compact ? 56 : 72) : compact ? 24 : 36,
+    right: compact ? 16 : 36,
+    bottom:
+      (payload.showAxisLabels ? 26 : 10) +
+      (payload.xLabel ? 32 : 8) +
+      (hasLegend ? 36 : 8),
+    left: payload.yLabel
+      ? compact
+        ? 72
+        : 86
+      : payload.showAxisLabels
+        ? 64
+        : 40,
+  };
+  const plotWidth = Math.max(
+    GRID * 10,
+    contentWidth - cartesianPadding.left - cartesianPadding.right,
+  );
+  const plotHeight = Math.max(
+    GRID * 6,
+    contentHeight - cartesianPadding.top - cartesianPadding.bottom,
+  );
+  const legendHeight = hasLegend ? 24 : 0;
+  const cartesianLegendY = Math.min(
+    contentHeight - legendHeight - GRID,
+    cartesianPadding.top + plotHeight + (payload.xLabel ? 62 : 38),
+  );
+
+  const doughnutTop = payload.title ? (compact ? 56 : 72) : compact ? 16 : 32;
+  const rightLegendAllowed =
+    payload.legendPos === "right" && size.width >= 560 && size.height >= 300;
+  const legendRows = Math.ceil(
+    payload.rows.length / (rightLegendAllowed ? 1 : 2),
+  );
+  const doughnutLegendHeight = hasLegend ? Math.max(24, legendRows * 26) : 0;
+  const doughnutLegendWidth = hasLegend
+    ? rightLegendAllowed
+      ? Math.min(240, Math.max(176, contentWidth * 0.28))
+      : Math.min(contentWidth - GRID * 2, 520)
+    : 0;
+  const doughnutGap = hasLegend ? (compact ? 12 : 24) : 0;
+  const availableDoughnutHeight = Math.max(
+    GRID * 10,
+    contentHeight -
+      doughnutTop -
+      GRID -
+      (rightLegendAllowed ? 0 : doughnutLegendHeight + doughnutGap),
+  );
+  const availableDoughnutWidth = Math.max(
+    GRID * 10,
+    contentWidth - (rightLegendAllowed ? doughnutLegendWidth + doughnutGap : 0),
+  );
+  const squareSize = Math.max(
+    GRID * 10,
+    Math.min(availableDoughnutWidth, availableDoughnutHeight),
+  );
+  const combinedWidth = rightLegendAllowed
+    ? squareSize + doughnutGap + doughnutLegendWidth
+    : squareSize;
+  const chartX = Math.max(GRID, (contentWidth - combinedWidth) / 2);
+  const chartY = doughnutTop;
+  const legendX = rightLegendAllowed
+    ? chartX + squareSize + doughnutGap
+    : Math.max(GRID, (contentWidth - doughnutLegendWidth) / 2);
+  const legendY = rightLegendAllowed
+    ? chartY + Math.max(0, (squareSize - doughnutLegendHeight) / 2)
+    : Math.min(
+        contentHeight - doughnutLegendHeight - GRID,
+        chartY + squareSize + doughnutGap,
+      );
+
+  return {
+    outerWidth: size.width,
+    outerHeight: size.height,
+    contentWidth,
+    contentHeight,
+    cartesian: {
+      padding: cartesianPadding,
+      plotWidth,
+      plotHeight,
+      legendY: cartesianLegendY,
+      legendHeight,
+    },
+    doughnut: {
+      chartX,
+      chartY,
+      squareSize,
+      legendX,
+      legendY,
+      legendWidth: doughnutLegendWidth,
+      legendHeight: doughnutLegendHeight,
+      legendColumns: rightLegendAllowed ? 1 : 2,
+    },
+  };
+}
+
 function createBaseFrame(
   payload: ChartPayload,
   fallbackName: string,
+  layout: ChartLayout,
 ): { frame: FrameNode; contentFrame: FrameNode } {
   const frame = figma.createFrame();
   frame.name = payload.title || fallbackName;
-  if (frame.resize) frame.resize(CHART_SIZE.width, CHART_SIZE.height);
-  frame.x = figma.viewport.center.x - CHART_SIZE.width / 2;
-  frame.y = figma.viewport.center.y - CHART_SIZE.height / 2;
+  if (frame.resize) frame.resize(layout.outerWidth, layout.outerHeight);
+  frame.x = figma.viewport.center.x - layout.outerWidth / 2;
+  frame.y = figma.viewport.center.y - layout.outerHeight / 2;
   frame.fills = [solid(COLORS.background)];
   frame.clipsContent = true;
 
@@ -249,11 +434,11 @@ function createBaseFrame(
   contentFrame.x = CHART_FRAME_PADDING;
   contentFrame.y = CHART_FRAME_PADDING;
   if (contentFrame.resize) {
-    contentFrame.resize(CONTENT_SIZE.width, CONTENT_SIZE.height);
+    contentFrame.resize(layout.contentWidth, layout.contentHeight);
   }
   contentFrame.fills = [];
   contentFrame.clipsContent = true;
-  setConstraints(contentFrame, "STRETCH", "STRETCH");
+  setConstraints(contentFrame, "MIN", "MIN");
   frame.appendChild(contentFrame);
 
   if (payload.title) {
@@ -264,34 +449,24 @@ function createBaseFrame(
       COLORS.text,
       0,
       0,
-      CONTENT_SIZE.width,
+      layout.contentWidth,
       TEXT_STYLES.title.lineHeight,
       "CENTER",
+      TEXT_STYLES.title.lineHeight,
     );
     title.name = "Chart Title";
     title.textAlignVertical = "TOP";
-    setConstraints(title, "STRETCH", "MIN");
+    setConstraints(title, "MIN", "MIN");
     contentFrame.appendChild(title);
   }
 
   return { frame, contentFrame };
 }
 
-function getPlotPadding(payload: ChartPayload) {
-  return {
-    top: payload.title ? 72 : 36,
-    right: 36,
-    bottom: 92,
-    left: 86,
-  };
-}
-
 function createEditableBarChart(payload: ChartPayload): FrameNode {
-  const width = CONTENT_SIZE.width;
-  const height = CONTENT_SIZE.height;
-  const padding = getPlotPadding(payload);
-  const plotWidth = width - padding.left - padding.right;
-  const plotHeight = height - padding.top - padding.bottom;
+  const layout = createChartLayout(payload);
+  const { padding, plotWidth, plotHeight } = layout.cartesian;
+  const height = layout.contentHeight;
   const seriesCount = Math.max(1, payload.seriesNames.length);
   const rows = payload.rows.map((row) => ({
     label: row.label,
@@ -308,6 +483,7 @@ function createEditableBarChart(payload: ChartPayload): FrameNode {
   const { frame, contentFrame } = createBaseFrame(
     payload,
     "ChartStudio Bar Chart",
+    layout,
   );
   frame.name = payload.title
     ? `ChartStudio Bar Chart · ${payload.title}`
@@ -334,18 +510,16 @@ function createEditableBarChart(payload: ChartPayload): FrameNode {
   drawAxisLabels(contentFrame, payload, padding, plotWidth, plotHeight);
 
   if (payload.showLegend && seriesCount > 1) {
-    drawLegend(contentFrame, payload, padding, plotWidth, height);
+    drawLegend(contentFrame, payload, padding, plotWidth, height, layout);
   }
 
   return frame;
 }
 
 function createEditableLineChart(payload: ChartPayload): FrameNode {
-  const width = CONTENT_SIZE.width;
-  const height = CONTENT_SIZE.height;
-  const padding = getPlotPadding(payload);
-  const plotWidth = width - padding.left - padding.right;
-  const plotHeight = height - padding.top - padding.bottom;
+  const layout = createChartLayout(payload);
+  const { padding, plotWidth, plotHeight } = layout.cartesian;
+  const height = layout.contentHeight;
   const seriesCount = Math.max(1, payload.seriesNames.length);
   const rows = payload.rows.map((row) => ({
     label: row.label,
@@ -358,6 +532,7 @@ function createEditableLineChart(payload: ChartPayload): FrameNode {
   const { frame, contentFrame } = createBaseFrame(
     payload,
     "ChartStudio Line Chart",
+    layout,
   );
   frame.name = payload.title
     ? `ChartStudio Line Chart · ${payload.title}`
@@ -481,7 +656,7 @@ function createEditableLineChart(payload: ChartPayload): FrameNode {
     drawAxisLabels(contentFrame, payload, padding, plotWidth, plotHeight);
 
     if (payload.showLegend && seriesCount > 1) {
-      drawLegend(contentFrame, payload, padding, plotWidth, height);
+      drawLegend(contentFrame, payload, padding, plotWidth, height, layout);
     }
 
     return frame;
@@ -492,11 +667,11 @@ function createEditableLineChart(payload: ChartPayload): FrameNode {
 }
 
 function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
-  const width = CONTENT_SIZE.width;
-  const height = CONTENT_SIZE.height;
+  const layout = createChartLayout(payload);
   const { frame, contentFrame } = createBaseFrame(
     payload,
     "ChartStudio Doughnut Chart",
+    layout,
   );
   frame.name = payload.title
     ? `ChartStudio Doughnut Chart · ${payload.title}`
@@ -508,31 +683,25 @@ function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
     value: Math.max(0, Number(row.values[0]) || 0),
   }));
   const total = values.reduce((sum, row) => sum + row.value, 0);
-  const outerRadius = 132;
-  const diameter = outerRadius * 2;
+  const doughnut = layout.doughnut;
+  const diameter = doughnut.squareSize;
+  const outerRadius = diameter / 2;
   const innerRadius = Math.max(
-    32,
-    Math.min(112, outerRadius * (payload.innerRadius / 100)),
+    20,
+    Math.min(outerRadius - 12, outerRadius * (payload.innerRadius / 100)),
   );
-  const rightLegendWidth = 220;
-  const rightLegendGap = 52;
-  const chartX =
-    payload.showLegend && payload.legendPos === "right"
-      ? (width - diameter - rightLegendGap - rightLegendWidth) / 2
-      : (width - diameter) / 2;
-  const chartY = payload.title ? 112 : 72;
   const centerX = outerRadius;
   const centerY = outerRadius;
   const doughnutFrame = withConstraints(
     createTransparentFrame(
       "Doughnut chart area",
-      chartX,
-      chartY,
+      doughnut.chartX,
+      doughnut.chartY,
       diameter,
       diameter,
     ),
-    "SCALE",
-    "SCALE",
+    "MIN",
+    "MIN",
   );
   doughnutFrame.constrainProportions = true;
   let angle = -Math.PI / 2;
@@ -548,8 +717,8 @@ function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
           payload.segmentBorders ? COLORS.background : undefined,
           payload.segmentBorders ? 2 : 0,
         ),
-        "SCALE",
-        "SCALE",
+        "MIN",
+        "MIN",
       ),
     );
     angle = nextAngle;
@@ -564,18 +733,19 @@ function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
       innerRadius * 2,
       COLORS.background,
     ),
-    "SCALE",
-    "SCALE",
+    "CENTER",
+    "CENTER",
   );
   centerHole.constrainProportions = true;
   doughnutFrame.appendChild(centerHole);
 
   if (payload.showValues || payload.showPercent) {
+    const centerValueSize = diameter < 120 ? 14 : 22;
     doughnutFrame.appendChild(
       withConstraints(
         createText(
           payload.showPercent ? "100%" : formatNumber(total, payload),
-          22,
+          centerValueSize,
           FONT_REGULAR,
           COLORS.text,
           centerX - 48,
@@ -588,37 +758,30 @@ function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
         "CENTER",
       ),
     );
-    doughnutFrame.appendChild(
-      withConstraints(
-        createText(
-          "Total",
-          11,
-          FONT_REGULAR,
-          COLORS.mutedText,
-          centerX - 48,
-          centerY + 8,
-          96,
-          16,
+    if (diameter >= 128) {
+      doughnutFrame.appendChild(
+        withConstraints(
+          createText(
+            "Total",
+            11,
+            FONT_REGULAR,
+            COLORS.mutedText,
+            centerX - 48,
+            centerY + 8,
+            96,
+            16,
+            "CENTER",
+          ),
+          "CENTER",
           "CENTER",
         ),
-        "CENTER",
-        "CENTER",
-      ),
-    );
+      );
+    }
   }
   contentFrame.appendChild(doughnutFrame);
 
   if (payload.showLegend) {
-    drawDoughnutLegend(
-      contentFrame,
-      payload,
-      values,
-      total,
-      colors,
-      chartX,
-      chartY,
-      outerRadius,
-    );
+    drawDoughnutLegend(contentFrame, payload, values, total, colors, layout);
   } else {
     drawDoughnutLabels(
       contentFrame,
@@ -626,9 +789,11 @@ function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
       values,
       total,
       colors,
-      chartX,
-      chartY,
+      doughnut.chartX,
+      doughnut.chartY,
       outerRadius,
+      layout.contentWidth,
+      layout.contentHeight,
     );
   }
 
@@ -902,7 +1067,7 @@ function drawAxisLabels(
   }
 
   if (payload.yLabel) {
-    const yLabelAreaWidth = 48;
+    const yLabelAreaWidth = Math.max(32, padding.left - 38);
     const yLabelArea = withConstraints(
       createTransparentFrame(
         "Y axis label area",
@@ -920,7 +1085,7 @@ function drawAxisLabels(
         TEXT_STYLES.axisTitle.fontSize,
         TEXT_STYLES.axisTitle.font,
         COLORS.text,
-        20,
+        (yLabelAreaWidth - TEXT_STYLES.axisTitle.lineHeight) / 2,
         plotHeight,
         plotHeight,
         TEXT_STYLES.axisTitle.lineHeight,
@@ -931,7 +1096,6 @@ function drawAxisLabels(
     );
     yLabel.name = "Y axis label";
     yLabel.rotation = -90;
-    setConstraints(yLabel, "MIN", "MAX");
     yLabelArea.appendChild(yLabel);
     frame.appendChild(yLabelArea);
   }
@@ -942,16 +1106,17 @@ function drawLegend(
   payload: ChartPayload,
   padding: { top: number; left: number; bottom: number; right: number },
   plotWidth: number,
-  height: number,
+  _height: number,
+  layout: ChartLayout,
 ) {
   const colors = PALETTES[payload.palette].map(hexToRgb);
   const legendFrame = withConstraints(
     createTransparentFrame(
       "Chart legend",
       padding.left,
-      height - 32,
+      layout.cartesian.legendY,
       plotWidth,
-      24,
+      layout.cartesian.legendHeight || 24,
     ),
     "STRETCH",
     "MAX",
@@ -1026,42 +1191,40 @@ function drawDoughnutLegend(
   values: { label: string; value: number }[],
   total: number,
   colors: RGB[],
-  chartX: number,
-  chartY: number,
-  outerRadius: number,
+  layout: ChartLayout,
 ) {
-  const columns = payload.legendPos === "bottom" ? 2 : 1;
-  const rowWidth = payload.legendPos === "right" ? 220 : 250;
   const rowHeight = 26;
-  const legendX =
-    payload.legendPos === "right" ? chartX + outerRadius * 2 + 52 : 96;
-  const legendY =
-    payload.legendPos === "right" ? chartY + 24 : chartY + outerRadius * 2 + 28;
+  const columns = layout.doughnut.legendColumns;
+  const columnGap = columns > 1 ? 20 : 0;
+  const rowWidth = Math.max(
+    132,
+    (layout.doughnut.legendWidth - columnGap * (columns - 1)) / columns,
+  );
   const legendFrame = withConstraints(
     createTransparentFrame(
       "Chart legend",
-      legendX,
-      legendY,
-      rowWidth * columns + (columns - 1) * 20,
-      Math.ceil(values.length / columns) * rowHeight,
+      layout.doughnut.legendX,
+      layout.doughnut.legendY,
+      layout.doughnut.legendWidth,
+      layout.doughnut.legendHeight,
     ),
-    payload.legendPos === "right" ? "MAX" : "CENTER",
-    payload.legendPos === "right" ? "CENTER" : "MAX",
+    "MIN",
+    "MIN",
   );
 
   values.forEach((row, index) => {
-    const column = payload.legendPos === "bottom" ? index % 2 : 0;
+    const column = columns > 1 ? index % columns : 0;
     const legendRow = Math.floor(index / columns);
     const itemFrame = withConstraints(
       createTransparentFrame(
         `Legend item · ${row.label}`,
-        column * (rowWidth + 20),
+        column * (rowWidth + columnGap),
         legendRow * rowHeight,
         rowWidth,
         20,
       ),
-      "SCALE",
-      "SCALE",
+      "MIN",
+      "MIN",
     );
     itemFrame.appendChild(
       withConstraints(
@@ -1078,6 +1241,9 @@ function drawDoughnutLegend(
         "CENTER",
       ),
     );
+    const valueLabel = payload.showPercent
+      ? `${Math.round((row.value / total) * 100)}%`
+      : formatNumber(row.value, payload);
     itemFrame.appendChild(
       withConstraints(
         createText(
@@ -1087,17 +1253,14 @@ function drawDoughnutLegend(
           COLORS.text,
           18,
           0,
-          rowWidth - 92,
+          Math.max(28, rowWidth - 86),
           20,
           "LEFT",
         ),
-        "STRETCH",
+        "MIN",
         "CENTER",
       ),
     );
-    const valueLabel = payload.showPercent
-      ? `${Math.round((row.value / total) * 100)}%`
-      : formatNumber(row.value, payload);
     itemFrame.appendChild(
       withConstraints(
         createText(
@@ -1105,9 +1268,9 @@ function drawDoughnutLegend(
           11,
           FONT_MEDIUM,
           COLORS.mutedText,
-          rowWidth - 76,
+          rowWidth - 64,
           0,
-          76,
+          64,
           20,
           "RIGHT",
         ),
@@ -1129,13 +1292,21 @@ function drawDoughnutLabels(
   chartX: number,
   chartY: number,
   outerRadius: number,
+  contentWidth: number,
+  contentHeight: number,
 ) {
   let angle = -Math.PI / 2;
   values.forEach((row, index) => {
     const nextAngle = angle + (row.value / total) * Math.PI * 2;
     const mid = (angle + nextAngle) / 2;
-    const x = chartX + outerRadius + Math.cos(mid) * (outerRadius + 42);
-    const y = chartY + outerRadius + Math.sin(mid) * (outerRadius + 28);
+    const x = Math.min(
+      contentWidth - 52,
+      Math.max(52, chartX + outerRadius + Math.cos(mid) * (outerRadius + 32)),
+    );
+    const y = Math.min(
+      contentHeight - 12,
+      Math.max(12, chartY + outerRadius + Math.sin(mid) * (outerRadius + 24)),
+    );
     frame.appendChild(
       withConstraints(
         createText(
