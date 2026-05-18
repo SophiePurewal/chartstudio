@@ -18,6 +18,7 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
+import { getDoughnutPatternType } from "@/lib/doughnut-patterns";
 import { cn } from "@/lib/utils";
 import type {
   ChartOutputSize,
@@ -165,17 +166,6 @@ const LINE_STYLES: LineStyle[] = [
   { id: "dash-01", name: "Dash 01", dash: "8 8", linecap: "butt" },
   { id: "dash-02", name: "Dash 02", dash: "24 12", linecap: "butt" },
 ];
-
-const DOUGHNUT_PATTERN_TYPES = [
-  "solid",
-  "hatch",
-  "hatch-reverse",
-  "dot",
-  "cross-hatch",
-  "grid",
-  "dot-condensed",
-] as const;
-type DoughnutPatternType = (typeof DOUGHNUT_PATTERN_TYPES)[number];
 
 const SERIES_LIMIT: Record<ChartType, number> = {
   line: 4,
@@ -2215,20 +2205,19 @@ function ChartRender({
   // doughnut
   const nums = data.map((d) => Number(d.values[0] ?? 0));
   const total = nums.reduce((a, b) => a + b, 0) || 1;
-  const sorted = data
-    .map((d, i) => ({
-      label: d.label,
-      num: Number(d.values[0] ?? 0),
-      color: palette[i % palette.length],
-    }))
-    .sort((a, b) => b.num - a.num);
+  const segments = data.map((d, i) => ({
+    label: d.label,
+    num: Number(d.values[0] ?? 0),
+    color: palette[i % palette.length],
+    patternType: getDoughnutPatternType(i),
+  }));
 
   const size = expanded ? 200 : 120;
   const r = size / 2;
   const ir = r * (config.innerRadius / 100);
   let acc = 0;
 
-  const arcs = sorted.map((d) => {
+  const arcs = segments.map((d) => {
     const start = (acc / total) * Math.PI * 2 - Math.PI / 2;
     acc += d.num;
     const end = (acc / total) * Math.PI * 2 - Math.PI / 2;
@@ -2341,7 +2330,7 @@ function ChartRender({
                 d={a.path}
                 fill={
                   config.palette === "pattern-fill"
-                    ? `url(#doughnut-pattern-${DOUGHNUT_PATTERN_TYPES[i % DOUGHNUT_PATTERN_TYPES.length]})`
+                    ? `url(#doughnut-pattern-${a.patternType})`
                     : a.color
                 }
                 stroke={config.segmentBorders ? "var(--color-surface)" : "none"}
@@ -2366,7 +2355,12 @@ function ChartRender({
               >
                 <span
                   className="size-2 rounded-sm shrink-0"
-                  style={{ background: a.color }}
+                  style={{
+                    background:
+                      config.palette === "pattern-fill"
+                        ? `url(#doughnut-pattern-${a.patternType})`
+                        : a.color,
+                  }}
                 />
                 <span className="truncate text-foreground">{a.label}</span>
                 <span className="ml-auto tabular-nums text-muted-foreground">
