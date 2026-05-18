@@ -16,7 +16,10 @@ await build({
   configFile: false,
   publicDir: false,
   build: {
-    target: "es2019",
+    // Figma Desktop's plugin controller runtime can reject newer syntax such as
+    // call/object spread before any plugin code runs. Keep the controller bundle
+    // conservative so startup succeeds even when chart code uses modern TS.
+    target: "es2015",
     outDir: dist,
     emptyOutDir: false,
     lib: {
