@@ -19,7 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { BarChartPayload, FigmaToUiMessage } from "@/figma/types";
+import type { ChartPayload, FigmaToUiMessage } from "@/figma/types";
 
 type ChartType = "line" | "bar" | "doughnut";
 type DataMode = "paste" | "manual";
@@ -313,14 +313,12 @@ export function ChartStudioApp() {
   }, []);
 
   const insert = () => {
-    if (config.type !== "bar") {
-      setInsertError(
-        "This first Figma plugin version can only create editable bar charts. Choose Bar to continue.",
-      );
+    if (!config.type) {
+      setInsertError("Choose a chart type before creating a chart.");
       return;
     }
 
-    const payload: BarChartPayload = {
+    const payload: ChartPayload = {
       type: config.type,
       rows: dataPoints,
       seriesNames,
@@ -336,13 +334,20 @@ export function ChartStudioApp() {
       barRadius: config.barRadius,
       barSpacing: config.barSpacing,
       barLayout: config.barLayout,
+      lineWeight: config.lineWeight,
+      smooth: config.smooth,
+      showPoints: config.showPoints,
+      showPercent: config.showPercent,
+      innerRadius: config.innerRadius,
+      legendPos: config.legendPos,
+      segmentBorders: config.segmentBorders,
       palette: config.palette,
     };
 
     setInserting(true);
     setInsertError(null);
     parent.postMessage(
-      { pluginMessage: { type: "create-bar-chart", payload } },
+      { pluginMessage: { type: "create-chart", payload } },
       "*",
     );
   };

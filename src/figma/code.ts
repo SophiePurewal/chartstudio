@@ -1,4 +1,4 @@
-import type { BarChartPayload, UiToFigmaMessage } from "./types";
+import type { ChartPayload, UiToFigmaMessage } from "./types";
 
 type RGB = { r: number; g: number; b: number };
 type Paint = { type: "SOLID"; color: RGB; opacity?: number };
@@ -20,6 +20,11 @@ type RectangleNode = SceneNode & {
   fills: Paint[];
   cornerRadius: number;
 };
+type EllipseNode = SceneNode & {
+  fills: Paint[];
+  strokes: Paint[];
+  strokeWeight: number;
+};
 type TextNode = SceneNode & {
   characters: string;
   fontSize: number;
@@ -32,6 +37,13 @@ type LineNode = SceneNode & {
   strokes: Paint[];
   strokeWeight: number;
   rotation: number;
+};
+type VectorNode = SceneNode & {
+  fills: Paint[];
+  strokes: Paint[];
+  strokeWeight: number;
+  vectorPaths: { windingRule: "NONZERO" | "EVENODD"; data: string }[];
+  strokeCap?: "NONE" | "ROUND" | "SQUARE";
 };
 
 type FigmaPluginApi = {
@@ -53,8 +65,10 @@ type FigmaPluginApi = {
   };
   createFrame: () => FrameNode;
   createRectangle: () => RectangleNode;
+  createEllipse: () => EllipseNode;
   createText: () => TextNode;
   createLine: () => LineNode;
+  createVector: () => VectorNode;
   loadFontAsync: (fontName: FontName) => Promise<void>;
   notify: (message: string, options?: { error?: boolean }) => void;
   closePlugin: () => void;
@@ -67,11 +81,20 @@ const FONT_REGULAR: FontName = { family: "Inter", style: "Regular" };
 const FONT_MEDIUM: FontName = { family: "Inter", style: "Medium" };
 const FONT_BOLD: FontName = { family: "Inter", style: "Bold" };
 
-const PALETTES: Record<BarChartPayload["palette"], string[]> = {
+const PALETTES: Record<ChartPayload["palette"], string[]> = {
   finance: ["#635BFF", "#00A6D6", "#22A06B", "#F2A900", "#E15A46", "#A855F7"],
   neutral: ["#1F2937", "#475569", "#64748B", "#94A3B8", "#CBD5E1", "#E2E8F0"],
   vibrant: ["#6366F1", "#06B6D4", "#10B981", "#F59E0B", "#EF4444", "#A855F7"],
-  data: ["#278004", "#860DA8", "#005873", "#D5648D", "#959898", "#386500"],
+  data: [
+    "#278004",
+    "#860DA8",
+    "#005873",
+    "#D5648D",
+    "#959898",
+    "#386500",
+    "#5840DC",
+    "#449DC4",
+  ],
 };
 
 const COLORS = {
@@ -82,6 +105,8 @@ const COLORS = {
   background: hexToRgb("#FFFFFF"),
 };
 
+const CHART_SIZE = { width: 720, height: 460 };
+
 figma.showUI(__html__, { width: 440, height: 760, themeColors: true });
 
 figma.ui.onmessage = async (message) => {
@@ -90,65 +115,132 @@ figma.ui.onmessage = async (message) => {
     return;
   }
 
-  if (message.type !== "create-bar-chart") return;
-
-  if (message.payload.type !== "bar") {
-    const error =
-      "This first Figma plugin version can only create editable bar charts.";
-    figma.notify(error, { error: true });
-    figma.ui.postMessage({ type: "chart-error", message: error });
+  if (message.type !== "create-chart" && message.type !== "create-bar-chart") {
     return;
   }
 
-  const result = validatePayload(message.payload);
-  if (!result.valid) {
-    figma.notify(result.message, { error: true });
-    figma.ui.postMessage({ type: "chart-error", message: result.message });
-    return;
+  try {
+    const result = validatePayload(message.payload);
+    if (!result.valid) {
+      figma.notify(result.message, { error: true });
+      figma.ui.postMessage({ type: "chart-error", message: result.message });
+      return;
+    }
+
+    await Promise.all([
+      figma.loadFontAsync(FONT_REGULAR),
+      figma.loadFontAsync(FONT_MEDIUM),
+      figma.loadFontAsync(FONT_BOLD),
+    ]);
+
+    const chart = createEditableChart(message.payload);
+    figma.currentPage.appendChild(chart);
+    figma.currentPage.selection = [chart];
+    figma.viewport.scrollAndZoomIntoView([chart]);
+    figma.notify(
+      `Editable ${getChartTypeLabel(message.payload.type)} chart created`,
+    );
+    figma.ui.postMessage({ type: "chart-created" });
+  } catch (error) {
+    const messageText =
+      error instanceof Error
+        ? `Could not create ${getChartTypeLabel(message.payload.type)} chart: ${error.message}`
+        : `Could not create ${getChartTypeLabel(message.payload.type)} chart.`;
+    figma.notify(messageText, { error: true });
+    figma.ui.postMessage({ type: "chart-error", message: messageText });
   }
-
-  await Promise.all([
-    figma.loadFontAsync(FONT_REGULAR),
-    figma.loadFontAsync(FONT_MEDIUM),
-    figma.loadFontAsync(FONT_BOLD),
-  ]);
-
-  const chart = createEditableBarChart(message.payload);
-  figma.currentPage.appendChild(chart);
-  figma.currentPage.selection = [chart];
-  figma.viewport.scrollAndZoomIntoView([chart]);
-  figma.notify("Editable bar chart created");
-  figma.ui.postMessage({ type: "chart-created" });
 };
 
 function validatePayload(
-  payload: BarChartPayload,
+  payload: ChartPayload,
 ): { valid: true } | { valid: false; message: string } {
-  if (payload.rows.length < 2)
+  if (!payload.type) {
     return {
       valid: false,
-      message: "Add at least two rows of data before creating a chart.",
+      message: "Choose a chart type before creating a chart.",
     };
+  }
+  if (payload.rows.length < 2) {
+    return {
+      valid: false,
+      message: `Add at least two ${payload.type === "doughnut" ? "segments" : "rows"} of data before creating a chart.`,
+    };
+  }
   const hasNumericValue = payload.rows.every((row) =>
     row.values.some((value) => Number.isFinite(Number(value))),
   );
-  if (!hasNumericValue)
+  if (!hasNumericValue) {
     return {
       valid: false,
       message: "Every row needs at least one numeric value.",
     };
+  }
+  if (payload.type === "doughnut") {
+    const values = payload.rows.map((row) => Number(row.values[0]) || 0);
+    if (values.some((value) => value < 0)) {
+      return { valid: false, message: "Doughnut charts need positive values." };
+    }
+    if (values.reduce((sum, value) => sum + value, 0) <= 0) {
+      return {
+        valid: false,
+        message: "Doughnut chart values must add up to more than zero.",
+      };
+    }
+  }
   return { valid: true };
 }
 
-function createEditableBarChart(payload: BarChartPayload): FrameNode {
-  const width = 720;
-  const height = 460;
-  const padding = {
+function createEditableChart(payload: ChartPayload): FrameNode {
+  if (payload.type === "bar") return createEditableBarChart(payload);
+  if (payload.type === "line") return createEditableLineChart(payload);
+  if (payload.type === "doughnut") return createEditableDoughnutChart(payload);
+  throw new Error("Unsupported chart type.");
+}
+
+function createBaseFrame(
+  payload: ChartPayload,
+  fallbackName: string,
+): FrameNode {
+  const frame = figma.createFrame();
+  frame.name = payload.title || fallbackName;
+  frame.resize?.(CHART_SIZE.width, CHART_SIZE.height);
+  frame.x = figma.viewport.center.x - CHART_SIZE.width / 2;
+  frame.y = figma.viewport.center.y - CHART_SIZE.height / 2;
+  frame.fills = [solid(COLORS.background)];
+  frame.clipsContent = false;
+
+  if (payload.title) {
+    frame.appendChild(
+      createText(
+        payload.title,
+        24,
+        FONT_BOLD,
+        COLORS.text,
+        24,
+        22,
+        CHART_SIZE.width - 48,
+        30,
+        "LEFT",
+      ),
+    );
+  }
+
+  return frame;
+}
+
+function getPlotPadding(payload: ChartPayload) {
+  return {
     top: payload.title ? 64 : 36,
     right: 36,
     bottom: 92,
     left: 86,
   };
+}
+
+function createEditableBarChart(payload: ChartPayload): FrameNode {
+  const width = CHART_SIZE.width;
+  const height = CHART_SIZE.height;
+  const padding = getPlotPadding(payload);
   const plotWidth = width - padding.left - padding.right;
   const plotHeight = height - padding.top - padding.bottom;
   const seriesCount = Math.max(1, payload.seriesNames.length);
@@ -162,29 +254,10 @@ function createEditableBarChart(payload: BarChartPayload): FrameNode {
   );
   const niceMax = niceCeil(maxValue);
 
-  const frame = figma.createFrame();
-  frame.name = payload.title || "Editable bar chart";
-  frame.resize?.(width, height);
-  frame.x = figma.viewport.center.x - width / 2;
-  frame.y = figma.viewport.center.y - height / 2;
-  frame.fills = [solid(COLORS.background)];
-  frame.clipsContent = false;
-
-  if (payload.title) {
-    frame.appendChild(
-      createText(
-        payload.title,
-        24,
-        FONT_BOLD,
-        COLORS.text,
-        24,
-        22,
-        width - 48,
-        30,
-        "LEFT",
-      ),
-    );
-  }
+  const frame = createBaseFrame(payload, "ChartStudio Bar Chart");
+  frame.name = payload.title
+    ? `ChartStudio Bar Chart · ${payload.title}`
+    : "ChartStudio Bar Chart";
 
   drawGridAndAxes(frame, payload, padding, plotWidth, plotHeight, niceMax);
   drawBars(
@@ -206,9 +279,200 @@ function createEditableBarChart(payload: BarChartPayload): FrameNode {
   return frame;
 }
 
+function createEditableLineChart(payload: ChartPayload): FrameNode {
+  const width = CHART_SIZE.width;
+  const height = CHART_SIZE.height;
+  const padding = getPlotPadding(payload);
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const seriesCount = Math.max(1, payload.seriesNames.length);
+  const rows = payload.rows.map((row) => ({
+    label: row.label,
+    values: row.values.slice(0, seriesCount).map((value) => Number(value) || 0),
+  }));
+  const niceMax = niceCeil(Math.max(...rows.flatMap((row) => row.values), 1));
+  const colors = PALETTES[payload.palette].map(hexToRgb);
+  const frame = createBaseFrame(payload, "ChartStudio Line Chart");
+  frame.name = payload.title
+    ? `ChartStudio Line Chart · ${payload.title}`
+    : "ChartStudio Line Chart";
+
+  drawGridAndAxes(frame, payload, padding, plotWidth, plotHeight, niceMax);
+
+  const denominator = Math.max(rows.length - 1, 1);
+  for (let seriesIndex = 0; seriesIndex < seriesCount; seriesIndex += 1) {
+    const seriesName =
+      payload.seriesNames[seriesIndex] ?? `Series ${seriesIndex + 1}`;
+    const points = rows.map((row, rowIndex) => {
+      const x = padding.left + (plotWidth * rowIndex) / denominator;
+      const y =
+        padding.top +
+        plotHeight -
+        (Math.max(0, row.values[seriesIndex] ?? 0) / niceMax) * plotHeight;
+      return { x, y, value: row.values[seriesIndex] ?? 0, label: row.label };
+    });
+    frame.appendChild(
+      createVectorPath(
+        `${seriesName} Line`,
+        payload.smooth ? smoothPath(points) : straightPath(points),
+        colors[seriesIndex % colors.length],
+        Math.max(1, payload.lineWeight),
+      ),
+    );
+
+    if (payload.showPoints) {
+      points.forEach((point) => {
+        frame.appendChild(
+          createEllipse(
+            `${seriesName} data point · ${point.label}`,
+            point.x - 4,
+            point.y - 4,
+            8,
+            8,
+            colors[seriesIndex % colors.length],
+            COLORS.background,
+            1.5,
+          ),
+        );
+        if (payload.showValues) {
+          frame.appendChild(
+            createText(
+              formatNumber(point.value, payload),
+              10,
+              FONT_MEDIUM,
+              COLORS.mutedText,
+              point.x - 30,
+              point.y - 24,
+              60,
+              14,
+              "CENTER",
+            ),
+          );
+        }
+      });
+    }
+  }
+
+  drawXAxisCategoryLabels(frame, payload, rows, padding, plotWidth, plotHeight);
+  drawAxisLabels(frame, payload, padding, plotWidth, plotHeight);
+
+  if (payload.showLegend && seriesCount > 1) {
+    drawLegend(frame, payload, padding, plotWidth, height);
+  }
+
+  return frame;
+}
+
+function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
+  const width = CHART_SIZE.width;
+  const height = CHART_SIZE.height;
+  const frame = createBaseFrame(payload, "ChartStudio Doughnut Chart");
+  frame.name = payload.title
+    ? `ChartStudio Doughnut Chart · ${payload.title}`
+    : "ChartStudio Doughnut Chart";
+
+  const colors = PALETTES[payload.palette].map(hexToRgb);
+  const values = payload.rows.map((row) => ({
+    label: row.label,
+    value: Math.max(0, Number(row.values[0]) || 0),
+  }));
+  const total = values.reduce((sum, row) => sum + row.value, 0);
+  const outerRadius = 132;
+  const innerRadius = Math.max(
+    32,
+    Math.min(112, outerRadius * (payload.innerRadius / 100)),
+  );
+  const chartX =
+    payload.showLegend && payload.legendPos === "right" ? 104 : 228;
+  const chartY = payload.title ? 100 : 72;
+  const centerX = chartX + outerRadius;
+  const centerY = chartY + outerRadius;
+  let angle = -Math.PI / 2;
+
+  values.forEach((row, index) => {
+    const nextAngle = angle + (row.value / total) * Math.PI * 2;
+    frame.appendChild(
+      createFilledVectorPath(
+        `Doughnut Segment ${index + 1} · ${row.label}`,
+        arcPath(centerX, centerY, outerRadius, innerRadius, angle, nextAngle),
+        colors[index % colors.length],
+        payload.segmentBorders ? COLORS.background : undefined,
+        payload.segmentBorders ? 2 : 0,
+      ),
+    );
+    angle = nextAngle;
+  });
+
+  frame.appendChild(
+    createEllipse(
+      "Doughnut Center Hole",
+      centerX - innerRadius,
+      centerY - innerRadius,
+      innerRadius * 2,
+      innerRadius * 2,
+      COLORS.background,
+    ),
+  );
+
+  if (payload.showValues || payload.showPercent) {
+    frame.appendChild(
+      createText(
+        payload.showPercent ? "100%" : formatNumber(total, payload),
+        22,
+        FONT_BOLD,
+        COLORS.text,
+        centerX - 48,
+        centerY - 18,
+        96,
+        24,
+        "CENTER",
+      ),
+    );
+    frame.appendChild(
+      createText(
+        "Total",
+        11,
+        FONT_REGULAR,
+        COLORS.mutedText,
+        centerX - 48,
+        centerY + 8,
+        96,
+        16,
+        "CENTER",
+      ),
+    );
+  }
+
+  if (payload.showLegend) {
+    drawDoughnutLegend(
+      frame,
+      payload,
+      values,
+      total,
+      colors,
+      chartX,
+      chartY,
+      outerRadius,
+    );
+  } else {
+    drawDoughnutLabels(
+      frame,
+      payload,
+      values,
+      total,
+      colors,
+      chartX,
+      chartY,
+      outerRadius,
+    );
+  }
+
+  return frame;
+}
+
 function drawGridAndAxes(
   frame: FrameNode,
-  payload: BarChartPayload,
+  payload: ChartPayload,
   padding: { top: number; left: number; bottom: number; right: number },
   plotWidth: number,
   plotHeight: number,
@@ -271,7 +535,7 @@ function drawGridAndAxes(
 
 function drawBars(
   frame: FrameNode,
-  payload: BarChartPayload,
+  payload: ChartPayload,
   rows: { label: string; values: number[] }[],
   padding: { top: number; left: number; bottom: number; right: number },
   plotWidth: number,
@@ -368,9 +632,36 @@ function drawBars(
   });
 }
 
+function drawXAxisCategoryLabels(
+  frame: FrameNode,
+  payload: ChartPayload,
+  rows: { label: string; values: number[] }[],
+  padding: { top: number; left: number; bottom: number; right: number },
+  plotWidth: number,
+  plotHeight: number,
+) {
+  if (!payload.showAxisLabels) return;
+  const denominator = Math.max(rows.length - 1, 1);
+  rows.forEach((row, rowIndex) => {
+    frame.appendChild(
+      createText(
+        row.label,
+        11,
+        FONT_REGULAR,
+        COLORS.mutedText,
+        padding.left + (plotWidth * rowIndex) / denominator - 36,
+        padding.top + plotHeight + 10,
+        72,
+        18,
+        "CENTER",
+      ),
+    );
+  });
+}
+
 function drawAxisLabels(
   frame: FrameNode,
-  payload: BarChartPayload,
+  payload: ChartPayload,
   padding: { top: number; left: number; bottom: number; right: number },
   plotWidth: number,
   plotHeight: number,
@@ -409,7 +700,7 @@ function drawAxisLabels(
 
 function drawLegend(
   frame: FrameNode,
-  payload: BarChartPayload,
+  payload: ChartPayload,
   padding: { top: number; left: number; bottom: number; right: number },
   plotWidth: number,
   height: number,
@@ -446,6 +737,107 @@ function drawLegend(
   });
 }
 
+function drawDoughnutLegend(
+  frame: FrameNode,
+  payload: ChartPayload,
+  values: { label: string; value: number }[],
+  total: number,
+  colors: RGB[],
+  chartX: number,
+  chartY: number,
+  outerRadius: number,
+) {
+  const legendX =
+    payload.legendPos === "right" ? chartX + outerRadius * 2 + 52 : 96;
+  const legendY =
+    payload.legendPos === "right" ? chartY + 24 : chartY + outerRadius * 2 + 28;
+  const rowWidth = payload.legendPos === "right" ? 220 : 250;
+  values.forEach((row, index) => {
+    const x =
+      payload.legendPos === "bottom" && index % 2 === 1
+        ? legendX + 270
+        : legendX;
+    const y =
+      legendY +
+      Math.floor(index / (payload.legendPos === "bottom" ? 2 : 1)) * 26;
+    frame.appendChild(
+      createRectangle(
+        `Legend color · ${row.label}`,
+        x,
+        y + 4,
+        12,
+        12,
+        colors[index % colors.length],
+        3,
+      ),
+    );
+    frame.appendChild(
+      createText(
+        row.label,
+        11,
+        FONT_REGULAR,
+        COLORS.text,
+        x + 18,
+        y,
+        rowWidth - 92,
+        20,
+        "LEFT",
+      ),
+    );
+    const valueLabel = payload.showPercent
+      ? `${Math.round((row.value / total) * 100)}%`
+      : formatNumber(row.value, payload);
+    frame.appendChild(
+      createText(
+        valueLabel,
+        11,
+        FONT_MEDIUM,
+        COLORS.mutedText,
+        x + rowWidth - 76,
+        y,
+        76,
+        20,
+        "RIGHT",
+      ),
+    );
+  });
+}
+
+function drawDoughnutLabels(
+  frame: FrameNode,
+  payload: ChartPayload,
+  values: { label: string; value: number }[],
+  total: number,
+  colors: RGB[],
+  chartX: number,
+  chartY: number,
+  outerRadius: number,
+) {
+  let angle = -Math.PI / 2;
+  values.forEach((row, index) => {
+    const nextAngle = angle + (row.value / total) * Math.PI * 2;
+    const mid = (angle + nextAngle) / 2;
+    const x = chartX + outerRadius + Math.cos(mid) * (outerRadius + 42);
+    const y = chartY + outerRadius + Math.sin(mid) * (outerRadius + 28);
+    frame.appendChild(
+      createText(
+        payload.showPercent
+          ? `${row.label} · ${Math.round((row.value / total) * 100)}%`
+          : row.label,
+        11,
+        FONT_MEDIUM,
+        colors[index % colors.length],
+        x - 52,
+        y - 10,
+        104,
+        20,
+        "CENTER",
+      ),
+    );
+    angle = nextAngle;
+  });
+}
+
 function createRectangle(
   name: string,
   x: number,
@@ -463,6 +855,27 @@ function createRectangle(
   rectangle.fills = [solid(color)];
   rectangle.cornerRadius = cornerRadius;
   return rectangle;
+}
+
+function createEllipse(
+  name: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  color: RGB,
+  strokeColor?: RGB,
+  strokeWeight = 0,
+): EllipseNode {
+  const ellipse = figma.createEllipse();
+  ellipse.name = name;
+  ellipse.x = x;
+  ellipse.y = y;
+  ellipse.resize?.(width, height);
+  ellipse.fills = [solid(color)];
+  ellipse.strokes = strokeColor ? [solid(strokeColor)] : [];
+  ellipse.strokeWeight = strokeWeight;
+  return ellipse;
 }
 
 function createText(
@@ -508,9 +921,86 @@ function createLine(
   return line;
 }
 
+function createVectorPath(
+  name: string,
+  data: string,
+  color: RGB,
+  strokeWeight: number,
+): VectorNode {
+  const vector = figma.createVector();
+  vector.name = name;
+  vector.x = 0;
+  vector.y = 0;
+  vector.fills = [];
+  vector.strokes = [solid(color)];
+  vector.strokeWeight = strokeWeight;
+  vector.strokeCap = "ROUND";
+  vector.vectorPaths = [{ windingRule: "NONZERO", data }];
+  return vector;
+}
+
+function createFilledVectorPath(
+  name: string,
+  data: string,
+  fillColor: RGB,
+  strokeColor?: RGB,
+  strokeWeight = 0,
+): VectorNode {
+  const vector = figma.createVector();
+  vector.name = name;
+  vector.x = 0;
+  vector.y = 0;
+  vector.fills = [solid(fillColor)];
+  vector.strokes = strokeColor ? [solid(strokeColor)] : [];
+  vector.strokeWeight = strokeWeight;
+  vector.vectorPaths = [{ windingRule: "EVENODD", data }];
+  return vector;
+}
+
+function straightPath(points: { x: number; y: number }[]) {
+  if (!points.length) return "";
+  return points
+    .map((point, index) => `${index === 0 ? "M" : "L"}${point.x},${point.y}`)
+    .join(" ");
+}
+
+function smoothPath(points: { x: number; y: number }[]) {
+  if (!points.length) return "";
+  let d = `M${points[0].x},${points[0].y}`;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const current = points[index];
+    const next = points[index + 1];
+    const controlX = (current.x + next.x) / 2;
+    d += ` C${controlX},${current.y} ${controlX},${next.y} ${next.x},${next.y}`;
+  }
+  return d;
+}
+
+function arcPath(
+  cx: number,
+  cy: number,
+  r: number,
+  ir: number,
+  start: number,
+  end: number,
+) {
+  const fullCircle = end - start >= Math.PI * 2 - 0.0001;
+  const adjustedEnd = fullCircle ? end - 0.0001 : end;
+  const large = adjustedEnd - start > Math.PI ? 1 : 0;
+  const x1 = cx + r * Math.cos(start);
+  const y1 = cy + r * Math.sin(start);
+  const x2 = cx + r * Math.cos(adjustedEnd);
+  const y2 = cy + r * Math.sin(adjustedEnd);
+  const x3 = cx + ir * Math.cos(adjustedEnd);
+  const y3 = cy + ir * Math.sin(adjustedEnd);
+  const x4 = cx + ir * Math.cos(start);
+  const y4 = cy + ir * Math.sin(start);
+  return `M${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} L${x3},${y3} A${ir},${ir} 0 ${large} 0 ${x4},${y4} Z`;
+}
+
 function getMaxValue(
   values: number[][],
-  layout: BarChartPayload["barLayout"],
+  layout: ChartPayload["barLayout"],
 ): number {
   if (layout === "stacked") {
     return Math.max(
@@ -532,7 +1022,7 @@ function niceCeil(value: number): number {
   return nice * magnitude;
 }
 
-function formatNumber(value: number, payload: BarChartPayload): string {
+function formatNumber(value: number, payload: ChartPayload): string {
   const rounded = Math.round(value);
   const base = payload.thousands
     ? rounded.toLocaleString("en-GB")
@@ -540,6 +1030,12 @@ function formatNumber(value: number, payload: BarChartPayload): string {
   if (payload.numberFormat === "currency") return `£${base}`;
   if (payload.numberFormat === "percent") return `${base}%`;
   return base;
+}
+
+function getChartTypeLabel(type: ChartPayload["type"]): string {
+  if (type === "line") return "line";
+  if (type === "doughnut") return "doughnut";
+  return "bar";
 }
 
 function solid(color: RGB, opacity?: number): Paint {
