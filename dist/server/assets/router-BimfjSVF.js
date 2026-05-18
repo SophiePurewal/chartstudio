@@ -1,4 +1,4 @@
-import { N as reactExports, t as functionalUpdate$1, a as arraysEqual, g as createLRUCache, B as isPromise, C as isRedirect, A as isNotFound, x as invariant, f as createControlledPromise, X as rootRouteId, E as isServer$1, d as compileDecodeCharMap, Z as trimPath, W as rewriteBasepath, e as composeRewrites, M as processRouteTree, L as processRouteMasks, V as resolvePath, c as cleanPath, $ as trimPathRight, K as parseHref, o as executeRewriteInput, y as isDangerousProtocol, P as redirect, s as findSingleMatch, j as deepEqual, D as DEFAULT_PROTOCOL_ALLOWLIST, b as buildRouteBranch, w as interpolatePath, J as nullReplaceEqualDeep, S as replaceEqualDeep$1, H as last, i as decodePath, q as findFlatMatch, r as findRouteMatch, v as hasKeys, p as executeRewriteOutput, l as encodePathLikeUrl, _ as trimPathLeft, F as joinPaths, a1 as useRouter, k as dummyMatchContext, I as matchContext, T as requireReactDom, n as exactPathTest, Q as removeTrailingSlash, R as React, G as jsxRuntimeExports, a0 as useHydrated, m as escapeHtml, z as isInlinableStylesheet, u as getAssetCrossOrigin, U as resolveManifestAssetLink, O as Outlet } from "./server-CmlW_lK3.js";
+import { N as reactExports, t as functionalUpdate$1, a as arraysEqual, g as createLRUCache, B as isPromise, C as isRedirect, A as isNotFound, x as invariant, f as createControlledPromise, X as rootRouteId, E as isServer$1, d as compileDecodeCharMap, Z as trimPath, W as rewriteBasepath, e as composeRewrites, M as processRouteTree, L as processRouteMasks, V as resolvePath, c as cleanPath, $ as trimPathRight, K as parseHref, o as executeRewriteInput, y as isDangerousProtocol, P as redirect, s as findSingleMatch, j as deepEqual, D as DEFAULT_PROTOCOL_ALLOWLIST, b as buildRouteBranch, w as interpolatePath, J as nullReplaceEqualDeep, S as replaceEqualDeep$1, H as last, i as decodePath, q as findFlatMatch, r as findRouteMatch, v as hasKeys, p as executeRewriteOutput, l as encodePathLikeUrl, _ as trimPathLeft, F as joinPaths, a1 as useRouter, k as dummyMatchContext, I as matchContext, T as requireReactDom, n as exactPathTest, Q as removeTrailingSlash, R as React, G as jsxRuntimeExports, a0 as useHydrated, m as escapeHtml, z as isInlinableStylesheet, u as getAssetCrossOrigin, U as resolveManifestAssetLink, O as Outlet } from "./server-Tvtce0jW.js";
 import "node:async_hooks";
 import "node:stream/web";
 import "node:stream";
@@ -4953,7 +4953,18 @@ function createPatternedDoughnutSvg(opts) {
     acc += Math.max(0, segment.value);
     const end = acc / total * Math.PI * 2 - Math.PI / 2;
     const patternType = getDoughnutPatternType(index);
-    return `<path d="${arcPath$1(outerRadius, outerRadius, outerRadius, innerRadius, start, end)}" fill="url(#${defPrefix}-${patternType})" ${segmentBorders ? 'stroke="#FFFFFF" stroke-width="2"' : ""} />`;
+    const path = arcPath$1(
+      outerRadius,
+      outerRadius,
+      outerRadius,
+      innerRadius,
+      start,
+      end
+    );
+    return `
+        <path d="${path}" fill="#E6E3DC" ${segmentBorders ? 'stroke="#FFFFFF" stroke-width="2"' : ""} />
+        <path d="${path}" fill="url(#${defPrefix}-${patternType})" ${segmentBorders ? 'stroke="#FFFFFF" stroke-width="2"' : ""} />
+      `;
   }).join("\n");
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
     ${defs}
