@@ -2,7 +2,9 @@
   "name": "ChartStudio",
   "id": "chartstudio-development-plugin",
   "api": "1.0.0",
-  "main": "dist/code.js",
-  "ui": "dist/ui.html",
-  "editorType": ["figma"]
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": [
+    "figma"
+  ]
 }
