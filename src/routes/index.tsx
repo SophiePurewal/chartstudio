@@ -18,6 +18,10 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
+import {
+  createPatternLegendSwatchSvg,
+  createPatternedDoughnutSvg,
+} from "@/lib/doughnut-pattern-svg";
 import { getDoughnutPatternType } from "@/lib/doughnut-patterns";
 import { cn } from "@/lib/utils";
 import type {
@@ -2228,6 +2232,20 @@ function ChartRender({
     };
   });
 
+  const patternedSvg =
+    config.palette === "pattern-fill"
+      ? createPatternedDoughnutSvg({
+          size,
+          innerRadiusRatio: config.innerRadius / 100,
+          segments: segments.map((segment) => ({
+            label: segment.label,
+            value: segment.num,
+          })),
+          segmentBorders: config.segmentBorders,
+          defPrefix: "doughnut-preview",
+        })
+      : null;
+
   return (
     <div className="h-full w-full flex flex-col">
       {/* Centered title at top with 48px gap */}
@@ -2248,96 +2266,28 @@ function ChartRender({
         )}
       >
         <div style={{ width: size, height: size }} className="shrink-0">
-          <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
-            {config.palette === "pattern-fill" && (
-              <defs>
-                <pattern
-                  id="doughnut-pattern-solid"
-                  patternUnits="userSpaceOnUse"
-                  width="8"
-                  height="8"
-                >
-                  <rect width="8" height="8" fill="#E6E3DC" />
-                </pattern>
-                <pattern
-                  id="doughnut-pattern-hatch"
-                  patternUnits="userSpaceOnUse"
-                  width="8"
-                  height="8"
-                >
-                  <rect width="8" height="8" fill="#E6E3DC" />
-                  <path d="M0,8 L8,0" stroke="#281805" strokeWidth="1" />
-                </pattern>
-                <pattern
-                  id="doughnut-pattern-hatch-reverse"
-                  patternUnits="userSpaceOnUse"
-                  width="8"
-                  height="8"
-                >
-                  <rect width="8" height="8" fill="#E6E3DC" />
-                  <path d="M0,0 L8,8" stroke="#281805" strokeWidth="1" />
-                </pattern>
-                <pattern
-                  id="doughnut-pattern-dot"
-                  patternUnits="userSpaceOnUse"
-                  width="8"
-                  height="8"
-                >
-                  <rect width="8" height="8" fill="#E6E3DC" />
-                  <circle cx="4" cy="4" r="1.2" fill="#281805" />
-                </pattern>
-                <pattern
-                  id="doughnut-pattern-cross-hatch"
-                  patternUnits="userSpaceOnUse"
-                  width="8"
-                  height="8"
-                >
-                  <rect width="8" height="8" fill="#E6E3DC" />
-                  <path
-                    d="M0,8 L8,0 M0,0 L8,8"
-                    stroke="#281805"
-                    strokeWidth="1"
-                  />
-                </pattern>
-                <pattern
-                  id="doughnut-pattern-grid"
-                  patternUnits="userSpaceOnUse"
-                  width="8"
-                  height="8"
-                >
-                  <rect width="8" height="8" fill="#E6E3DC" />
-                  <path
-                    d="M0,0 H8 M0,4 H8 M0,8 H8 M0,0 V8 M4,0 V8 M8,0 V8"
-                    stroke="#281805"
-                    strokeWidth="0.75"
-                  />
-                </pattern>
-                <pattern
-                  id="doughnut-pattern-dot-condensed"
-                  patternUnits="userSpaceOnUse"
-                  width="6"
-                  height="6"
-                >
-                  <rect width="6" height="6" fill="#E6E3DC" />
-                  <circle cx="1.5" cy="1.5" r="0.8" fill="#281805" />
-                  <circle cx="4.5" cy="4.5" r="0.8" fill="#281805" />
-                </pattern>
-              </defs>
-            )}
-            {arcs.map((a, i) => (
-              <path
-                key={i}
-                d={a.path}
-                fill={
-                  config.palette === "pattern-fill"
-                    ? `url(#doughnut-pattern-${a.patternType})`
-                    : a.color
-                }
-                stroke={config.segmentBorders ? "var(--color-surface)" : "none"}
-                strokeWidth={config.segmentBorders ? 2 : 0}
-              />
-            ))}
-          </svg>
+          {config.palette === "pattern-fill" && patternedSvg ? (
+            <img
+              src={`data:image/svg+xml;utf8,${encodeURIComponent(patternedSvg)}`}
+              width={size}
+              height={size}
+              alt="Pattern filled doughnut preview"
+            />
+          ) : (
+            <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
+              {arcs.map((a, i) => (
+                <path
+                  key={i}
+                  d={a.path}
+                  fill={a.color}
+                  stroke={
+                    config.segmentBorders ? "var(--color-surface)" : "none"
+                  }
+                  strokeWidth={config.segmentBorders ? 2 : 0}
+                />
+              ))}
+            </svg>
+          )}
         </div>
         {config.showLegend && (
           <div
@@ -2353,15 +2303,18 @@ function ChartRender({
                 key={i}
                 className="flex items-center gap-1.5 text-[10px] min-w-0"
               >
-                <span
-                  className="size-2 rounded-sm shrink-0"
-                  style={{
-                    background:
-                      config.palette === "pattern-fill"
-                        ? `url(#doughnut-pattern-${a.patternType})`
-                        : a.color,
-                  }}
-                />
+                {config.palette === "pattern-fill" ? (
+                  <img
+                    className="size-2 rounded-sm shrink-0"
+                    src={`data:image/svg+xml;utf8,${encodeURIComponent(createPatternLegendSwatchSvg(i, 12))}`}
+                    alt=""
+                  />
+                ) : (
+                  <span
+                    className="size-2 rounded-sm shrink-0"
+                    style={{ background: a.color }}
+                  />
+                )}
                 <span className="truncate text-foreground">{a.label}</span>
                 <span className="ml-auto tabular-nums text-muted-foreground">
                   {config.showPercent

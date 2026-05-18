@@ -9,8 +9,8 @@
     "file": "assets/styles-bhtVQlq9.css",
     "src": "/workspace/chartstudio/src/styles.css"
   },
-  "_server-BWBy01ar.js": {
-    "file": "assets/server-BWBy01ar.js",
+  "_server-CmlW_lK3.js": {
+    "file": "assets/server-CmlW_lK3.js",
     "name": "server",
     "isDynamicEntry": true,
     "dynamicImports": [
@@ -20,37 +20,37 @@
       "%23tanstack-start-plugin-adapters"
     ]
   },
-  "_worker-entry-D9rqmBHi.js": {
-    "file": "assets/worker-entry-D9rqmBHi.js",
+  "_worker-entry-CVh_uNAu.js": {
+    "file": "assets/worker-entry-CVh_uNAu.js",
     "name": "worker-entry",
     "dynamicImports": [
-      "_server-BWBy01ar.js"
+      "_server-CmlW_lK3.js"
     ]
   },
   "src/router.tsx": {
-    "file": "assets/router-BJU21-C_.js",
+    "file": "assets/router-BooPFp_k.js",
     "name": "router",
     "src": "src/router.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_server-BWBy01ar.js"
+      "_server-CmlW_lK3.js"
     ],
     "assets": [
       "assets/styles-bhtVQlq9.css"
     ]
   },
   "src/start.ts": {
-    "file": "assets/start-BlU9wvEm.js",
+    "file": "assets/start-B_0BzQku.js",
     "name": "start",
     "src": "src/start.ts",
     "isDynamicEntry": true,
     "imports": [
-      "_worker-entry-D9rqmBHi.js",
-      "_server-BWBy01ar.js"
+      "_worker-entry-CVh_uNAu.js",
+      "_server-CmlW_lK3.js"
     ]
   },
   "tanstack-start-manifest:v": {
-    "file": "assets/_tanstack-start-manifest_v-Bb_J1z1u.js",
+    "file": "assets/_tanstack-start-manifest_v-CpWLbyYx.js",
     "name": "_tanstack-start-manifest_v",
     "src": "tanstack-start-manifest:v",
     "isDynamicEntry": true
@@ -61,7 +61,7 @@
     "src": "virtual:cloudflare/worker-entry",
     "isEntry": true,
     "imports": [
-      "_worker-entry-D9rqmBHi.js"
+      "_worker-entry-CVh_uNAu.js"
     ]
   }
 }

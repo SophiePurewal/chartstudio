@@ -1,4 +1,7 @@
-import { getDoughnutPatternType } from "../lib/doughnut-patterns";
+import {
+  createPatternLegendSwatchSvg,
+  createPatternedDoughnutSvg,
+} from "../lib/doughnut-pattern-svg";
 import type {
   ChartOutputSize,
   ChartPayload,
@@ -82,6 +85,7 @@ type FigmaPluginApi = {
   createText: () => TextNode;
   createLine: () => LineNode;
   createVector: () => VectorNode;
+  createNodeFromSvg: (svg: string) => SceneNode;
   loadFontAsync: (fontName: FontName) => Promise<void>;
   notify: (message: string, options?: { error?: boolean }) => void;
   closePlugin: () => void;
@@ -736,41 +740,47 @@ function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
 
   values.forEach((row, index) => {
     const nextAngle = angle + (row.value / total) * Math.PI * 2;
-    const segmentPath = arcPath(
-      centerX,
-      centerY,
-      outerRadius,
-      innerRadius,
-      angle,
-      nextAngle,
-    );
-    doughnutFrame.appendChild(
-      withConstraints(
-        createFilledVectorPath(
-          `Doughnut Segment ${index + 1} · ${row.label}`,
-          segmentPath,
-          colors[index % colors.length],
-          payload.segmentBorders ? COLORS.background : undefined,
-          payload.segmentBorders ? 2 : 0,
-        ),
-        "MIN",
-        "MIN",
-      ),
-    );
-    if (payload.palette === "pattern-fill") {
-      appendDoughnutPattern(
-        doughnutFrame,
-        index,
+    if (payload.palette !== "pattern-fill") {
+      const segmentPath = arcPath(
         centerX,
         centerY,
-        innerRadius,
         outerRadius,
+        innerRadius,
         angle,
         nextAngle,
+      );
+      doughnutFrame.appendChild(
+        withConstraints(
+          createFilledVectorPath(
+            `Doughnut Segment ${index + 1} · ${row.label}`,
+            segmentPath,
+            colors[index % colors.length],
+            payload.segmentBorders ? COLORS.background : undefined,
+            payload.segmentBorders ? 2 : 0,
+          ),
+          "MIN",
+          "MIN",
+        ),
       );
     }
     angle = nextAngle;
   });
+
+  if (payload.palette === "pattern-fill") {
+    const svgNode = figma.createNodeFromSvg(
+      createPatternedDoughnutSvg({
+        size: diameter,
+        innerRadiusRatio: innerRadius / outerRadius,
+        segments: values.map((row) => ({ label: row.label, value: row.value })),
+        segmentBorders: payload.segmentBorders,
+        defPrefix: `doughnut-output-${Date.now()}`,
+      }),
+    );
+    svgNode.name = "Doughnut Pattern SVG";
+    svgNode.x = 0;
+    svgNode.y = 0;
+    doughnutFrame.appendChild(withConstraints(svgNode, "MIN", "MIN"));
+  }
 
   const centerHole = withConstraints(
     createEllipse(
@@ -846,111 +856,6 @@ function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
   }
 
   return frame;
-}
-
-function appendDoughnutPattern(
-  frame: FrameNode,
-  index: number,
-  centerX: number,
-  centerY: number,
-  innerRadius: number,
-  outerRadius: number,
-  startAngle: number,
-  endAngle: number,
-) {
-  const style = getDoughnutPatternType(index);
-  const stroke = hexToRgb("#281805");
-  if (style === "solid") return;
-  const span = Math.max(0.2, endAngle - startAngle);
-  const steps = style === "dot-condensed" ? 18 : 10;
-  if (style.includes("hatch") || style === "grid") {
-    for (let i = 0; i < steps; i += 1) {
-      const a0 = startAngle + (span / steps) * i;
-      const a1 = Math.min(endAngle, a0 + span / (steps * 2.4));
-      frame.appendChild(
-        withConstraints(
-          createFilledVectorPath(
-            `Pattern hatch ${index}-${i}`,
-            arcPath(centerX, centerY, outerRadius, innerRadius, a0, a1),
-            { ...stroke, r: stroke.r, g: stroke.g, b: stroke.b },
-            undefined,
-            0,
-          ),
-          "MIN",
-          "MIN",
-        ),
-      );
-    }
-  }
-  if (style === "dot" || style === "dot-condensed" || style === "grid") {
-    for (let i = 0; i < steps; i += 1) {
-      const a = startAngle + (span / steps) * (i + 0.5);
-      const r = (innerRadius + outerRadius) / 2;
-      const d = style === "dot-condensed" ? 2.2 : 3;
-      frame.appendChild(
-        withConstraints(
-          createEllipse(
-            `Pattern dot ${index}-${i}`,
-            centerX + Math.cos(a) * r - d / 2,
-            centerY + Math.sin(a) * r - d / 2,
-            d,
-            d,
-            stroke,
-          ),
-          "MIN",
-          "MIN",
-        ),
-      );
-    }
-  }
-}
-
-function appendLegendPattern(
-  frame: FrameNode,
-  index: number,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-) {
-  const stroke = hexToRgb("#281805");
-  const style = getDoughnutPatternType(index);
-  if (style === "solid") return;
-  if (style.includes("hatch") || style === "grid") {
-    for (let i = 0; i < 4; i += 1) {
-      frame.appendChild(
-        withConstraints(
-          createLinePath(
-            `Legend pattern ${index}-${i}`,
-            x + i * 3,
-            y,
-            x + Math.min(w, i * 3 + 4),
-            y + h,
-            stroke,
-            1,
-          ),
-          "MIN",
-          "MIN",
-        ),
-      );
-    }
-  }
-  if (style.includes("dot") || style === "grid") {
-    frame.appendChild(
-      withConstraints(
-        createEllipse(
-          `Legend dot ${index}`,
-          x + w / 2 - 1,
-          y + h / 2 - 1,
-          2,
-          2,
-          stroke,
-        ),
-        "MIN",
-        "MIN",
-      ),
-    );
-  }
 }
 
 function drawGridAndAxes(
@@ -1395,7 +1300,13 @@ function drawDoughnutLegend(
       ),
     );
     if (payload.palette === "pattern-fill") {
-      appendLegendPattern(itemFrame, index, 0, 4, 12, 12);
+      const legendSvgNode = figma.createNodeFromSvg(
+        createPatternLegendSwatchSvg(index, 12),
+      );
+      legendSvgNode.name = `Legend pattern · ${row.label}`;
+      legendSvgNode.x = 0;
+      legendSvgNode.y = 4;
+      itemFrame.appendChild(withConstraints(legendSvgNode, "MIN", "CENTER"));
     }
     const valueLabel = payload.showPercent
       ? `${Math.round((row.value / total) * 100)}%`

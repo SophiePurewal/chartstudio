@@ -1,4 +1,4 @@
-import { N as reactExports, t as functionalUpdate$1, a as arraysEqual, g as createLRUCache, B as isPromise, C as isRedirect, A as isNotFound, x as invariant, f as createControlledPromise, X as rootRouteId, E as isServer$1, d as compileDecodeCharMap, Z as trimPath, W as rewriteBasepath, e as composeRewrites, M as processRouteTree, L as processRouteMasks, V as resolvePath, c as cleanPath, $ as trimPathRight, K as parseHref, o as executeRewriteInput, y as isDangerousProtocol, P as redirect, s as findSingleMatch, j as deepEqual, D as DEFAULT_PROTOCOL_ALLOWLIST, b as buildRouteBranch, w as interpolatePath, J as nullReplaceEqualDeep, S as replaceEqualDeep$1, H as last, i as decodePath, q as findFlatMatch, r as findRouteMatch, v as hasKeys, p as executeRewriteOutput, l as encodePathLikeUrl, _ as trimPathLeft, F as joinPaths, a1 as useRouter, k as dummyMatchContext, I as matchContext, T as requireReactDom, n as exactPathTest, Q as removeTrailingSlash, R as React, G as jsxRuntimeExports, a0 as useHydrated, m as escapeHtml, z as isInlinableStylesheet, u as getAssetCrossOrigin, U as resolveManifestAssetLink, O as Outlet } from "./server-BWBy01ar.js";
+import { N as reactExports, t as functionalUpdate$1, a as arraysEqual, g as createLRUCache, B as isPromise, C as isRedirect, A as isNotFound, x as invariant, f as createControlledPromise, X as rootRouteId, E as isServer$1, d as compileDecodeCharMap, Z as trimPath, W as rewriteBasepath, e as composeRewrites, M as processRouteTree, L as processRouteMasks, V as resolvePath, c as cleanPath, $ as trimPathRight, K as parseHref, o as executeRewriteInput, y as isDangerousProtocol, P as redirect, s as findSingleMatch, j as deepEqual, D as DEFAULT_PROTOCOL_ALLOWLIST, b as buildRouteBranch, w as interpolatePath, J as nullReplaceEqualDeep, S as replaceEqualDeep$1, H as last, i as decodePath, q as findFlatMatch, r as findRouteMatch, v as hasKeys, p as executeRewriteOutput, l as encodePathLikeUrl, _ as trimPathLeft, F as joinPaths, a1 as useRouter, k as dummyMatchContext, I as matchContext, T as requireReactDom, n as exactPathTest, Q as removeTrailingSlash, R as React, G as jsxRuntimeExports, a0 as useHydrated, m as escapeHtml, z as isInlinableStylesheet, u as getAssetCrossOrigin, U as resolveManifestAssetLink, O as Outlet } from "./server-CmlW_lK3.js";
 import "node:async_hooks";
 import "node:stream/web";
 import "node:stream";
@@ -4882,6 +4882,93 @@ const __iconNode = [
   ["path", { d: "m6 6 12 12", key: "d8bk6v" }]
 ];
 const X = createLucideIcon("x", __iconNode);
+const DOUGHNUT_PATTERN_TYPES = [
+  "solid",
+  "hatch",
+  "hatch-reverse",
+  "dot",
+  "cross-hatch",
+  "grid",
+  "dot-condensed"
+];
+function getDoughnutPatternType(segmentIndex) {
+  const normalizedIndex = (Math.trunc(segmentIndex) % DOUGHNUT_PATTERN_TYPES.length + DOUGHNUT_PATTERN_TYPES.length) % DOUGHNUT_PATTERN_TYPES.length;
+  return DOUGHNUT_PATTERN_TYPES[normalizedIndex];
+}
+function createPatternDefs(defPrefix) {
+  const id = (name) => `${defPrefix}-${name}`;
+  return `
+  <defs>
+    <pattern id="${id("solid")}" patternUnits="userSpaceOnUse" width="8" height="8">
+      <rect width="8" height="8" fill="#E6E3DC" />
+    </pattern>
+    <pattern id="${id("hatch")}" patternUnits="userSpaceOnUse" width="8" height="8">
+      <rect width="8" height="8" fill="#E6E3DC" />
+      <path d="M0,8 L8,0" stroke="#281805" stroke-width="1" />
+    </pattern>
+    <pattern id="${id("hatch-reverse")}" patternUnits="userSpaceOnUse" width="8" height="8">
+      <rect width="8" height="8" fill="#E6E3DC" />
+      <path d="M0,0 L8,8" stroke="#281805" stroke-width="1" />
+    </pattern>
+    <pattern id="${id("dot")}" patternUnits="userSpaceOnUse" width="8" height="8">
+      <rect width="8" height="8" fill="#E6E3DC" />
+      <circle cx="4" cy="4" r="1.2" fill="#281805" />
+    </pattern>
+    <pattern id="${id("cross-hatch")}" patternUnits="userSpaceOnUse" width="8" height="8">
+      <rect width="8" height="8" fill="#E6E3DC" />
+      <path d="M0,8 L8,0 M0,0 L8,8" stroke="#281805" stroke-width="1" />
+    </pattern>
+    <pattern id="${id("grid")}" patternUnits="userSpaceOnUse" width="8" height="8">
+      <rect width="8" height="8" fill="#E6E3DC" />
+      <path d="M0,0 H8 M0,4 H8 M0,8 H8 M0,0 V8 M4,0 V8 M8,0 V8" stroke="#281805" stroke-width="0.75" />
+    </pattern>
+    <pattern id="${id("dot-condensed")}" patternUnits="userSpaceOnUse" width="6" height="6">
+      <rect width="6" height="6" fill="#E6E3DC" />
+      <circle cx="1.5" cy="1.5" r="0.8" fill="#281805" />
+      <circle cx="4.5" cy="4.5" r="0.8" fill="#281805" />
+    </pattern>
+  </defs>`;
+}
+function arcPath$1(cx, cy, r2, ir, start, end) {
+  const large = end - start > Math.PI ? 1 : 0;
+  const x0 = cx + Math.cos(start) * r2;
+  const y0 = cy + Math.sin(start) * r2;
+  const x1 = cx + Math.cos(end) * r2;
+  const y1 = cy + Math.sin(end) * r2;
+  const ix1 = cx + Math.cos(end) * ir;
+  const iy1 = cy + Math.sin(end) * ir;
+  const ix0 = cx + Math.cos(start) * ir;
+  const iy0 = cy + Math.sin(start) * ir;
+  return `M ${x0} ${y0} A ${r2} ${r2} 0 ${large} 1 ${x1} ${y1} L ${ix1} ${iy1} A ${ir} ${ir} 0 ${large} 0 ${ix0} ${iy0} Z`;
+}
+function createPatternedDoughnutSvg(opts) {
+  const { size, innerRadiusRatio, segments, segmentBorders, defPrefix } = opts;
+  const outerRadius = size / 2;
+  const innerRadius = outerRadius * innerRadiusRatio;
+  const total = segments.reduce((sum, s) => sum + Math.max(0, s.value), 0) || 1;
+  let acc = 0;
+  const defs = createPatternDefs(defPrefix);
+  const paths = segments.map((segment, index) => {
+    const start = acc / total * Math.PI * 2 - Math.PI / 2;
+    acc += Math.max(0, segment.value);
+    const end = acc / total * Math.PI * 2 - Math.PI / 2;
+    const patternType = getDoughnutPatternType(index);
+    return `<path d="${arcPath$1(outerRadius, outerRadius, outerRadius, innerRadius, start, end)}" fill="url(#${defPrefix}-${patternType})" ${segmentBorders ? 'stroke="#FFFFFF" stroke-width="2"' : ""} />`;
+  }).join("\n");
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    ${defs}
+    ${paths}
+    <circle cx="${outerRadius}" cy="${outerRadius}" r="${innerRadius}" fill="#FFFFFF" />
+  </svg>`;
+}
+function createPatternLegendSwatchSvg(patternIndex, size = 12) {
+  const patternType = getDoughnutPatternType(patternIndex);
+  const prefix = `legend-${patternIndex}`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    ${createPatternDefs(prefix)}
+    <rect x="0" y="0" width="${size}" height="${size}" rx="2" fill="url(#${prefix}-${patternType})" />
+  </svg>`;
+}
 function r(e) {
   var t, f, n = "";
   if ("string" == typeof e || "number" == typeof e) n += e;
@@ -8235,15 +8322,6 @@ const LINE_STYLES = [
   { id: "dash-01", name: "Dash 01", dash: "8 8", linecap: "butt" },
   { id: "dash-02", name: "Dash 02", dash: "24 12", linecap: "butt" }
 ];
-const DOUGHNUT_PATTERN_TYPES = [
-  "solid",
-  "hatch",
-  "hatch-reverse",
-  "dot",
-  "cross-hatch",
-  "grid",
-  "dot-condensed"
-];
 const SERIES_LIMIT = {
   line: 4,
   bar: 6,
@@ -10013,16 +10091,17 @@ function ChartRender({
   }
   const nums = data.map((d) => Number(d.values[0] ?? 0));
   const total = nums.reduce((a, b) => a + b, 0) || 1;
-  const sorted = data.map((d, i) => ({
+  const segments = data.map((d, i) => ({
     label: d.label,
     num: Number(d.values[0] ?? 0),
-    color: palette[i % palette.length]
-  })).sort((a, b) => b.num - a.num);
+    color: palette[i % palette.length],
+    patternType: getDoughnutPatternType(i)
+  }));
   const size = expanded ? 200 : 120;
   const r2 = size / 2;
   const ir = r2 * (config.innerRadius / 100);
   let acc = 0;
-  const arcs = sorted.map((d) => {
+  const arcs = segments.map((d) => {
     const start = acc / total * Math.PI * 2 - Math.PI / 2;
     acc += d.num;
     const end = acc / total * Math.PI * 2 - Math.PI / 2;
@@ -10032,6 +10111,16 @@ function ChartRender({
       pct: d.num / total * 100
     };
   });
+  const patternedSvg = config.palette === "pattern-fill" ? createPatternedDoughnutSvg({
+    size,
+    innerRadiusRatio: config.innerRadius / 100,
+    segments: segments.map((segment) => ({
+      label: segment.label,
+      value: segment.num
+    })),
+    segmentBorders: config.segmentBorders,
+    defPrefix: "doughnut-preview"
+  }) : null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "h-full w-full flex flex-col", children: [
     config.title && /* @__PURE__ */ jsxRuntimeExports.jsx(
       "div",
@@ -10049,123 +10138,24 @@ function ChartRender({
           config.legendPos === "bottom" ? "flex-col items-center" : "items-center"
         ),
         children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: size, height: size }, className: "shrink-0", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { viewBox: `0 0 ${size} ${size}`, width: size, height: size, children: [
-            config.palette === "pattern-fill" && /* @__PURE__ */ jsxRuntimeExports.jsxs("defs", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "pattern",
-                {
-                  id: "doughnut-pattern-solid",
-                  patternUnits: "userSpaceOnUse",
-                  width: "8",
-                  height: "8",
-                  children: /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { width: "8", height: "8", fill: "#E6E3DC" })
-                }
-              ),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                "pattern",
-                {
-                  id: "doughnut-pattern-hatch",
-                  patternUnits: "userSpaceOnUse",
-                  width: "8",
-                  height: "8",
-                  children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { width: "8", height: "8", fill: "#E6E3DC" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M0,8 L8,0", stroke: "#281805", strokeWidth: "1" })
-                  ]
-                }
-              ),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                "pattern",
-                {
-                  id: "doughnut-pattern-hatch-reverse",
-                  patternUnits: "userSpaceOnUse",
-                  width: "8",
-                  height: "8",
-                  children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { width: "8", height: "8", fill: "#E6E3DC" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M0,0 L8,8", stroke: "#281805", strokeWidth: "1" })
-                  ]
-                }
-              ),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                "pattern",
-                {
-                  id: "doughnut-pattern-dot",
-                  patternUnits: "userSpaceOnUse",
-                  width: "8",
-                  height: "8",
-                  children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { width: "8", height: "8", fill: "#E6E3DC" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "4", cy: "4", r: "1.2", fill: "#281805" })
-                  ]
-                }
-              ),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                "pattern",
-                {
-                  id: "doughnut-pattern-cross-hatch",
-                  patternUnits: "userSpaceOnUse",
-                  width: "8",
-                  height: "8",
-                  children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { width: "8", height: "8", fill: "#E6E3DC" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx(
-                      "path",
-                      {
-                        d: "M0,8 L8,0 M0,0 L8,8",
-                        stroke: "#281805",
-                        strokeWidth: "1"
-                      }
-                    )
-                  ]
-                }
-              ),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                "pattern",
-                {
-                  id: "doughnut-pattern-grid",
-                  patternUnits: "userSpaceOnUse",
-                  width: "8",
-                  height: "8",
-                  children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { width: "8", height: "8", fill: "#E6E3DC" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx(
-                      "path",
-                      {
-                        d: "M0,0 H8 M0,4 H8 M0,8 H8 M0,0 V8 M4,0 V8 M8,0 V8",
-                        stroke: "#281805",
-                        strokeWidth: "0.75"
-                      }
-                    )
-                  ]
-                }
-              ),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                "pattern",
-                {
-                  id: "doughnut-pattern-dot-condensed",
-                  patternUnits: "userSpaceOnUse",
-                  width: "6",
-                  height: "6",
-                  children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { width: "6", height: "6", fill: "#E6E3DC" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "1.5", cy: "1.5", r: "0.8", fill: "#281805" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "4.5", cy: "4.5", r: "0.8", fill: "#281805" })
-                  ]
-                }
-              )
-            ] }),
-            arcs.map((a, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "path",
-              {
-                d: a.path,
-                fill: config.palette === "pattern-fill" ? `url(#doughnut-pattern-${DOUGHNUT_PATTERN_TYPES[i % DOUGHNUT_PATTERN_TYPES.length]})` : a.color,
-                stroke: config.segmentBorders ? "var(--color-surface)" : "none",
-                strokeWidth: config.segmentBorders ? 2 : 0
-              },
-              i
-            ))
-          ] }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: size, height: size }, className: "shrink-0", children: config.palette === "pattern-fill" && patternedSvg ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "img",
+            {
+              src: `data:image/svg+xml;utf8,${encodeURIComponent(patternedSvg)}`,
+              width: size,
+              height: size,
+              alt: "Pattern filled doughnut preview"
+            }
+          ) : /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { viewBox: `0 0 ${size} ${size}`, width: size, height: size, children: arcs.map((a, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "path",
+            {
+              d: a.path,
+              fill: a.color,
+              stroke: config.segmentBorders ? "var(--color-surface)" : "none",
+              strokeWidth: config.segmentBorders ? 2 : 0
+            },
+            i
+          )) }) }),
           config.showLegend && /* @__PURE__ */ jsxRuntimeExports.jsx(
             "div",
             {
@@ -10178,7 +10168,14 @@ function ChartRender({
                 {
                   className: "flex items-center gap-1.5 text-[10px] min-w-0",
                   children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    config.palette === "pattern-fill" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "img",
+                      {
+                        className: "size-2 rounded-sm shrink-0",
+                        src: `data:image/svg+xml;utf8,${encodeURIComponent(createPatternLegendSwatchSvg(i, 12))}`,
+                        alt: ""
+                      }
+                    ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
                       "span",
                       {
                         className: "size-2 rounded-sm shrink-0",
