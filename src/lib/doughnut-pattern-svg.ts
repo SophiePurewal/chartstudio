@@ -1,43 +1,16 @@
-import { getDoughnutPatternType } from "./doughnut-patterns";
+import {
+  DOUGHNUT_PATTERN_TYPES,
+  type DoughnutPatternType,
+  getDoughnutPatternType,
+} from "./doughnut-patterns";
 
 export type DoughnutPatternSvgSegment = {
   value: number;
   label: string;
 };
 
-export function createPatternDefs(defPrefix: string): string {
-  const id = (name: string) => `${defPrefix}-${name}`;
-  return `
-  <defs>
-    <pattern id="${id("solid")}" patternUnits="userSpaceOnUse" width="8" height="8">
-      <rect width="8" height="8" fill="#E6E3DC" />
-    </pattern>
-    <pattern id="${id("hatch")}" patternUnits="userSpaceOnUse" width="8" height="8">
-      <rect width="8" height="8" fill="#E6E3DC" />
-      <path d="M0,8 L8,0" stroke="#281805" stroke-width="1" />
-    </pattern>
-    <pattern id="${id("hatch-reverse")}" patternUnits="userSpaceOnUse" width="8" height="8">
-      <rect width="8" height="8" fill="#E6E3DC" />
-      <path d="M0,0 L8,8" stroke="#281805" stroke-width="1" />
-    </pattern>
-    <pattern id="${id("dot")}" patternUnits="userSpaceOnUse" width="8" height="8">
-      <rect width="8" height="8" fill="#E6E3DC" />
-      <circle cx="4" cy="4" r="1.2" fill="#281805" />
-    </pattern>
-    <pattern id="${id("cross-hatch")}" patternUnits="userSpaceOnUse" width="8" height="8">
-      <rect width="8" height="8" fill="#E6E3DC" />
-      <path d="M0,8 L8,0 M0,0 L8,8" stroke="#281805" stroke-width="1" />
-    </pattern>
-    <pattern id="${id("grid")}" patternUnits="userSpaceOnUse" width="8" height="8">
-      <rect width="8" height="8" fill="#E6E3DC" />
-      <path d="M0,0 H8 M0,4 H8 M0,8 H8 M0,0 V8 M4,0 V8 M8,0 V8" stroke="#281805" stroke-width="0.75" />
-    </pattern>
-    <pattern id="${id("dot-condensed")}" patternUnits="userSpaceOnUse" width="6" height="6">
-      <rect width="6" height="6" fill="#E6E3DC" />
-      <circle cx="1.5" cy="1.5" r="0.8" fill="#281805" />
-      <circle cx="4.5" cy="4.5" r="0.8" fill="#281805" />
-    </pattern>
-  </defs>`;
+export function getPatternTypeForIndex(index: number): DoughnutPatternType {
+  return getDoughnutPatternType(index);
 }
 
 function arcPath(
@@ -60,6 +33,56 @@ function arcPath(
   return `M ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} L ${ix1} ${iy1} A ${ir} ${ir} 0 ${large} 0 ${ix0} ${iy0} Z`;
 }
 
+function patternMarks(pattern: DoughnutPatternType, size: number): string {
+  const dark = "#281805";
+  const lines: string[] = [];
+  const dots: string[] = [];
+  const step = pattern === "dot-condensed" ? 8 : 12;
+
+  if (pattern === "solid") return "";
+
+  for (let x = -size; x <= size * 2; x += step) {
+    if (pattern === "hatch" || pattern === "cross-hatch") {
+      lines.push(
+        `<line x1="${x}" y1="${size}" x2="${x + size}" y2="0" stroke="${dark}" stroke-width="1.75" />`,
+      );
+    }
+    if (pattern === "hatch-reverse" || pattern === "cross-hatch") {
+      lines.push(
+        `<line x1="${x}" y1="0" x2="${x + size}" y2="${size}" stroke="${dark}" stroke-width="1.75" />`,
+      );
+    }
+    if (pattern === "grid") {
+      lines.push(
+        `<line x1="${x}" y1="0" x2="${x}" y2="${size}" stroke="${dark}" stroke-width="1.4" />`,
+      );
+      lines.push(
+        `<line x1="0" y1="${x + size}" x2="${size}" y2="${x + size}" stroke="${dark}" stroke-width="1.4" />`,
+      );
+    }
+  }
+
+  if (pattern === "dot" || pattern === "dot-condensed") {
+    const spacing = pattern === "dot-condensed" ? 8 : 14;
+    const radius = pattern === "dot-condensed" ? 1.5 : 1.8;
+    for (let y = 0; y <= size; y += spacing) {
+      for (let x = 0; x <= size; x += spacing) {
+        dots.push(
+          `<circle cx="${x}" cy="${y}" r="${radius}" fill="${dark}" />`,
+        );
+      }
+    }
+  }
+
+  return [...lines, ...dots].join("\n");
+}
+
+export function getPatternPreviewStyle(
+  patternType: DoughnutPatternType,
+): string {
+  return patternMarks(patternType, 12);
+}
+
 export function createPatternedDoughnutSvg(opts: {
   size: number;
   innerRadiusRatio: number;
@@ -72,13 +95,13 @@ export function createPatternedDoughnutSvg(opts: {
   const innerRadius = outerRadius * innerRadiusRatio;
   const total = segments.reduce((sum, s) => sum + Math.max(0, s.value), 0) || 1;
   let acc = 0;
-  const defs = createPatternDefs(defPrefix);
-  const paths = segments
+
+  const segmentSvg = segments
     .map((segment, index) => {
       const start = (acc / total) * Math.PI * 2 - Math.PI / 2;
       acc += Math.max(0, segment.value);
       const end = (acc / total) * Math.PI * 2 - Math.PI / 2;
-      const patternType = getDoughnutPatternType(index);
+      const patternType = getPatternTypeForIndex(index);
       const path = arcPath(
         outerRadius,
         outerRadius,
@@ -87,16 +110,18 @@ export function createPatternedDoughnutSvg(opts: {
         start,
         end,
       );
+      const clipId = `${defPrefix}-clip-${index}`;
       return `
+        <clipPath id="${clipId}"><path d="${path}" /></clipPath>
         <path d="${path}" fill="#E6E3DC" ${segmentBorders ? 'stroke="#FFFFFF" stroke-width="2"' : ""} />
-        <path d="${path}" fill="url(#${defPrefix}-${patternType})" ${segmentBorders ? 'stroke="#FFFFFF" stroke-width="2"' : ""} />
+        <g clip-path="url(#${clipId})">${patternMarks(patternType, size)}</g>
       `;
     })
     .join("\n");
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-    ${defs}
-    ${paths}
+    <defs></defs>
+    ${segmentSvg}
     <circle cx="${outerRadius}" cy="${outerRadius}" r="${innerRadius}" fill="#FFFFFF" />
   </svg>`;
 }
@@ -105,10 +130,13 @@ export function createPatternLegendSwatchSvg(
   patternIndex: number,
   size = 12,
 ): string {
-  const patternType = getDoughnutPatternType(patternIndex);
-  const prefix = `legend-${patternIndex}`;
+  const patternType = getPatternTypeForIndex(patternIndex);
+  const marks = getPatternPreviewStyle(patternType);
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-    ${createPatternDefs(prefix)}
-    <rect x="0" y="0" width="${size}" height="${size}" rx="2" fill="url(#${prefix}-${patternType})" />
+    <rect x="0" y="0" width="${size}" height="${size}" rx="2" fill="#E6E3DC" />
+    <g clip-path="url(#clip)">${marks}</g>
+    <clipPath id="clip"><rect x="0" y="0" width="${size}" height="${size}" rx="2" /></clipPath>
   </svg>`;
 }
+
+export { DOUGHNUT_PATTERN_TYPES };
