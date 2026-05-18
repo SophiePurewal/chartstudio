@@ -797,45 +797,6 @@ function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
   centerHole.constrainProportions = true;
   doughnutFrame.appendChild(centerHole);
 
-  if (payload.showValues || payload.showPercent) {
-    const centerValueSize = diameter < 120 ? 14 : 22;
-    doughnutFrame.appendChild(
-      withConstraints(
-        createText(
-          payload.showPercent ? "100%" : formatNumber(total, payload),
-          centerValueSize,
-          FONT_REGULAR,
-          COLORS.text,
-          centerX - 48,
-          centerY - 18,
-          96,
-          24,
-          "CENTER",
-        ),
-        "CENTER",
-        "CENTER",
-      ),
-    );
-    if (diameter >= 128) {
-      doughnutFrame.appendChild(
-        withConstraints(
-          createText(
-            "Total",
-            11,
-            FONT_REGULAR,
-            COLORS.mutedText,
-            centerX - 48,
-            centerY + 8,
-            96,
-            16,
-            "CENTER",
-          ),
-          "CENTER",
-          "CENTER",
-        ),
-      );
-    }
-  }
   contentFrame.appendChild(doughnutFrame);
 
   if (payload.showLegend) {

@@ -38,7 +38,10 @@ Error generating stack: `+r.message+`
       <circle cx="1.5" cy="1.5" r="0.8" fill="#281805" />
       <circle cx="4.5" cy="4.5" r="0.8" fill="#281805" />
     </pattern>
-  </defs>`}function VC(n,s,l,i,c,f){const d=f-c>Math.PI?1:0,g=n+Math.cos(c)*l,m=s+Math.sin(c)*l,p=n+Math.cos(f)*l,b=s+Math.sin(f)*l,v=n+Math.cos(f)*i,w=s+Math.sin(f)*i,S=n+Math.cos(c)*i,E=s+Math.sin(c)*i;return`M ${g} ${m} A ${l} ${l} 0 ${d} 1 ${p} ${b} L ${v} ${w} A ${i} ${i} 0 ${d} 0 ${S} ${E} Z`}function XC(n){const{size:s,innerRadiusRatio:l,segments:i,segmentBorders:c,defPrefix:f}=n,d=s/2,g=d*l,m=i.reduce((w,S)=>w+Math.max(0,S.value),0)||1;let p=0;const b=vv(f),v=i.map((w,S)=>{const E=p/m*Math.PI*2-Math.PI/2;p+=Math.max(0,w.value);const A=p/m*Math.PI*2-Math.PI/2,C=Rf(S);return`<path d="${VC(d,d,d,g,E,A)}" fill="url(#${f}-${C})" ${c?'stroke="#FFFFFF" stroke-width="2"':""} />`}).join(`
+  </defs>`}function VC(n,s,l,i,c,f){const d=f-c>Math.PI?1:0,g=n+Math.cos(c)*l,m=s+Math.sin(c)*l,p=n+Math.cos(f)*l,b=s+Math.sin(f)*l,v=n+Math.cos(f)*i,w=s+Math.sin(f)*i,S=n+Math.cos(c)*i,E=s+Math.sin(c)*i;return`M ${g} ${m} A ${l} ${l} 0 ${d} 1 ${p} ${b} L ${v} ${w} A ${i} ${i} 0 ${d} 0 ${S} ${E} Z`}function XC(n){const{size:s,innerRadiusRatio:l,segments:i,segmentBorders:c,defPrefix:f}=n,d=s/2,g=d*l,m=i.reduce((w,S)=>w+Math.max(0,S.value),0)||1;let p=0;const b=vv(f),v=i.map((w,S)=>{const E=p/m*Math.PI*2-Math.PI/2;p+=Math.max(0,w.value);const A=p/m*Math.PI*2-Math.PI/2,C=Rf(S),j=VC(d,d,d,g,E,A);return`
+        <path d="${j}" fill="#E6E3DC" ${c?'stroke="#FFFFFF" stroke-width="2"':""} />
+        <path d="${j}" fill="url(#${f}-${C})" ${c?'stroke="#FFFFFF" stroke-width="2"':""} />
+      `}).join(`
 `);return`<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 ${s} ${s}">
     ${b}
     ${v}

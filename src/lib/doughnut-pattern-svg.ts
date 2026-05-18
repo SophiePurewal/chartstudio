@@ -79,7 +79,18 @@ export function createPatternedDoughnutSvg(opts: {
       acc += Math.max(0, segment.value);
       const end = (acc / total) * Math.PI * 2 - Math.PI / 2;
       const patternType = getDoughnutPatternType(index);
-      return `<path d="${arcPath(outerRadius, outerRadius, outerRadius, innerRadius, start, end)}" fill="url(#${defPrefix}-${patternType})" ${segmentBorders ? 'stroke="#FFFFFF" stroke-width="2"' : ""} />`;
+      const path = arcPath(
+        outerRadius,
+        outerRadius,
+        outerRadius,
+        innerRadius,
+        start,
+        end,
+      );
+      return `
+        <path d="${path}" fill="#E6E3DC" ${segmentBorders ? 'stroke="#FFFFFF" stroke-width="2"' : ""} />
+        <path d="${path}" fill="url(#${defPrefix}-${patternType})" ${segmentBorders ? 'stroke="#FFFFFF" stroke-width="2"' : ""} />
+      `;
     })
     .join("\n");
 
