@@ -94,9 +94,36 @@ const FONT_MEDIUM: FontName = { family: "Inter", style: "Medium" };
 const FONT_BOLD: FontName = { family: "Inter", style: "Bold" };
 
 const PALETTES: Record<ChartPayload["palette"], string[]> = {
-  finance: ["#635BFF", "#00A6D6", "#22A06B", "#F2A900", "#E15A46", "#A855F7"],
-  neutral: ["#1F2937", "#475569", "#64748B", "#94A3B8", "#CBD5E1", "#E2E8F0"],
-  vibrant: ["#6366F1", "#06B6D4", "#10B981", "#F59E0B", "#EF4444", "#A855F7"],
+  standard: [
+    "#278904",
+    "#24550C",
+    "#D648DD",
+    "#9E06A1",
+    "#6F6B66",
+    "#4E4C49",
+    "#187AC9",
+    "#0C4F73",
+    "#6045B1",
+    "#38179E",
+  ],
+  neutral: [
+    "#281805",
+    "#4A4742",
+    "#6B6761",
+    "#8D8982",
+    "#B0ACA5",
+    "#CAC8C2",
+    "#E6E3DC",
+  ],
+  "pattern-fill": [
+    "#E6E3DC",
+    "#E6E3DC",
+    "#E6E3DC",
+    "#E6E3DC",
+    "#E6E3DC",
+    "#E6E3DC",
+    "#E6E3DC",
+  ],
   data: [
     "#278004",
     "#860DA8",
@@ -108,6 +135,17 @@ const PALETTES: Record<ChartPayload["palette"], string[]> = {
     "#449DC4",
   ],
 };
+
+const DOUGHNUT_PATTERN_TYPES = [
+  "solid",
+  "hatch",
+  "hatch-reverse",
+  "dot",
+  "cross-hatch",
+  "grid",
+  "dot-condensed",
+] as const;
+type DoughnutPatternType = (typeof DOUGHNUT_PATTERN_TYPES)[number];
 
 const LINE_STYLES: Record<
   LineStyleName,
@@ -708,11 +746,19 @@ function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
 
   values.forEach((row, index) => {
     const nextAngle = angle + (row.value / total) * Math.PI * 2;
+    const segmentPath = arcPath(
+      centerX,
+      centerY,
+      outerRadius,
+      innerRadius,
+      angle,
+      nextAngle,
+    );
     doughnutFrame.appendChild(
       withConstraints(
         createFilledVectorPath(
           `Doughnut Segment ${index + 1} · ${row.label}`,
-          arcPath(centerX, centerY, outerRadius, innerRadius, angle, nextAngle),
+          segmentPath,
           colors[index % colors.length],
           payload.segmentBorders ? COLORS.background : undefined,
           payload.segmentBorders ? 2 : 0,
@@ -721,6 +767,18 @@ function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
         "MIN",
       ),
     );
+    if (payload.palette === "pattern-fill") {
+      appendDoughnutPattern(
+        doughnutFrame,
+        index,
+        centerX,
+        centerY,
+        innerRadius,
+        outerRadius,
+        angle,
+        nextAngle,
+      );
+    }
     angle = nextAngle;
   });
 
@@ -798,6 +856,111 @@ function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
   }
 
   return frame;
+}
+
+function appendDoughnutPattern(
+  frame: FrameNode,
+  index: number,
+  centerX: number,
+  centerY: number,
+  innerRadius: number,
+  outerRadius: number,
+  startAngle: number,
+  endAngle: number,
+) {
+  const style = DOUGHNUT_PATTERN_TYPES[index % DOUGHNUT_PATTERN_TYPES.length];
+  const stroke = hexToRgb("#281805");
+  if (style === "solid") return;
+  const span = Math.max(0.2, endAngle - startAngle);
+  const steps = style === "dot-condensed" ? 18 : 10;
+  if (style.includes("hatch") || style === "grid") {
+    for (let i = 0; i < steps; i += 1) {
+      const a0 = startAngle + (span / steps) * i;
+      const a1 = Math.min(endAngle, a0 + span / (steps * 2.4));
+      frame.appendChild(
+        withConstraints(
+          createFilledVectorPath(
+            `Pattern hatch ${index}-${i}`,
+            arcPath(centerX, centerY, outerRadius, innerRadius, a0, a1),
+            { ...stroke, r: stroke.r, g: stroke.g, b: stroke.b },
+            undefined,
+            0,
+          ),
+          "MIN",
+          "MIN",
+        ),
+      );
+    }
+  }
+  if (style === "dot" || style === "dot-condensed" || style === "grid") {
+    for (let i = 0; i < steps; i += 1) {
+      const a = startAngle + (span / steps) * (i + 0.5);
+      const r = (innerRadius + outerRadius) / 2;
+      const d = style === "dot-condensed" ? 2.2 : 3;
+      frame.appendChild(
+        withConstraints(
+          createEllipse(
+            `Pattern dot ${index}-${i}`,
+            centerX + Math.cos(a) * r - d / 2,
+            centerY + Math.sin(a) * r - d / 2,
+            d,
+            d,
+            stroke,
+          ),
+          "MIN",
+          "MIN",
+        ),
+      );
+    }
+  }
+}
+
+function appendLegendPattern(
+  frame: FrameNode,
+  index: number,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+) {
+  const stroke = hexToRgb("#281805");
+  const style = DOUGHNUT_PATTERN_TYPES[index % DOUGHNUT_PATTERN_TYPES.length];
+  if (style === "solid") return;
+  if (style.includes("hatch") || style === "grid") {
+    for (let i = 0; i < 4; i += 1) {
+      frame.appendChild(
+        withConstraints(
+          createLinePath(
+            `Legend pattern ${index}-${i}`,
+            x + i * 3,
+            y,
+            x + Math.min(w, i * 3 + 4),
+            y + h,
+            stroke,
+            1,
+          ),
+          "MIN",
+          "MIN",
+        ),
+      );
+    }
+  }
+  if (style.includes("dot") || style === "grid") {
+    frame.appendChild(
+      withConstraints(
+        createEllipse(
+          `Legend dot ${index}`,
+          x + w / 2 - 1,
+          y + h / 2 - 1,
+          2,
+          2,
+          stroke,
+        ),
+        "MIN",
+        "MIN",
+      ),
+    );
+  }
 }
 
 function drawGridAndAxes(
@@ -1241,6 +1404,9 @@ function drawDoughnutLegend(
         "CENTER",
       ),
     );
+    if (payload.palette === "pattern-fill") {
+      appendLegendPattern(itemFrame, index, 0, 4, 12, 12);
+    }
     const valueLabel = payload.showPercent
       ? `${Math.round((row.value / total) * 100)}%`
       : formatNumber(row.value, payload);

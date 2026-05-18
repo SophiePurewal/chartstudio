@@ -1,6 +1,6 @@
 export type ChartType = "line" | "bar" | "doughnut";
 export type NumberFormat = "currency" | "percent" | "plain";
-export type PaletteName = "finance" | "neutral" | "vibrant" | "data";
+export type PaletteName = "standard" | "neutral" | "pattern-fill" | "data";
 export type ChartSizePreset =
   | "desktop-12"
   | "desktop-10"

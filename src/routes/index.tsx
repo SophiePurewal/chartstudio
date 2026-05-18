@@ -61,7 +61,7 @@ type Config = {
   barSpacing: "compact" | "default" | "wide";
   barLayout: "grouped" | "stacked";
   // shared palette (also used for multi-series colors)
-  palette: "finance" | "neutral" | "vibrant" | "data";
+  palette: "standard" | "neutral" | "pattern-fill" | "data";
   // doughnut
   innerRadius: number;
   legendPos: "right" | "bottom";
@@ -100,17 +100,36 @@ const SAMPLE: Record<ChartType, string> = {
 };
 
 const PALETTES: Record<Config["palette"], string[]> = {
-  finance: [
-    "var(--color-chart-1)",
-    "var(--color-chart-2)",
-    "var(--color-chart-3)",
-    "var(--color-chart-4)",
-    "var(--color-chart-5)",
-    "var(--color-chart-6)",
+  standard: [
+    "#278904",
+    "#24550C",
+    "#D648DD",
+    "#9E06A1",
+    "#6F6B66",
+    "#4E4C49",
+    "#187AC9",
+    "#0C4F73",
+    "#6045B1",
+    "#38179E",
   ],
-  neutral: ["#1f2937", "#475569", "#64748b", "#94a3b8", "#cbd5e1", "#e2e8f0"],
-  vibrant: ["#6366f1", "#06b6d4", "#10b981", "#f59e0b", "#ef4444", "#a855f7"],
-  // Accessible data sequential palette (from brand spec — light/dark hue saturations)
+  neutral: [
+    "#281805",
+    "#4A4742",
+    "#6B6761",
+    "#8D8982",
+    "#B0ACA5",
+    "#CAC8C2",
+    "#E6E3DC",
+  ],
+  "pattern-fill": [
+    "#281805",
+    "#4A4742",
+    "#6B6761",
+    "#8D8982",
+    "#B0ACA5",
+    "#CAC8C2",
+    "#E6E3DC",
+  ],
   data: [
     "#278004", // seq-1.500 green
     "#860DA8", // seq-2.600 purple
@@ -147,6 +166,17 @@ const LINE_STYLES: LineStyle[] = [
   { id: "dash-02", name: "Dash 02", dash: "24 12", linecap: "butt" },
 ];
 
+const DOUGHNUT_PATTERN_TYPES = [
+  "solid",
+  "hatch",
+  "hatch-reverse",
+  "dot",
+  "cross-hatch",
+  "grid",
+  "dot-condensed",
+] as const;
+type DoughnutPatternType = (typeof DOUGHNUT_PATTERN_TYPES)[number];
+
 const SERIES_LIMIT: Record<ChartType, number> = {
   line: 4,
   bar: 6,
@@ -178,7 +208,7 @@ const initial: Config = {
   barRadius: 3,
   barSpacing: "default",
   barLayout: "grouped",
-  palette: "finance",
+  palette: "standard",
   innerRadius: 55,
   legendPos: "right",
   segmentBorders: true,
@@ -1329,9 +1359,9 @@ function Screen4({
             value={config.palette}
             onChange={(v) => update({ palette: v as Config["palette"] })}
             options={[
-              { value: "finance", label: "Finance" },
+              { value: "standard", label: "Standard" },
               { value: "neutral", label: "Neutral" },
-              { value: "vibrant", label: "Vibrant" },
+              { value: "pattern-fill", label: "Pattern fill" },
               { value: "data", label: "Accessible" },
             ]}
           />
@@ -1474,9 +1504,9 @@ function Screen4({
                 value={config.palette}
                 onChange={(v) => update({ palette: v as Config["palette"] })}
                 options={[
-                  { value: "finance", label: "Finance" },
+                  { value: "standard", label: "Standard" },
                   { value: "neutral", label: "Neutral" },
-                  { value: "vibrant", label: "Vibrant" },
+                  { value: "pattern-fill", label: "Pattern fill" },
                 ]}
               />
             </Field>
@@ -2230,11 +2260,90 @@ function ChartRender({
       >
         <div style={{ width: size, height: size }} className="shrink-0">
           <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
+            {config.palette === "pattern-fill" && (
+              <defs>
+                <pattern
+                  id="doughnut-pattern-solid"
+                  patternUnits="userSpaceOnUse"
+                  width="8"
+                  height="8"
+                >
+                  <rect width="8" height="8" fill="#E6E3DC" />
+                </pattern>
+                <pattern
+                  id="doughnut-pattern-hatch"
+                  patternUnits="userSpaceOnUse"
+                  width="8"
+                  height="8"
+                >
+                  <rect width="8" height="8" fill="#E6E3DC" />
+                  <path d="M0,8 L8,0" stroke="#281805" strokeWidth="1" />
+                </pattern>
+                <pattern
+                  id="doughnut-pattern-hatch-reverse"
+                  patternUnits="userSpaceOnUse"
+                  width="8"
+                  height="8"
+                >
+                  <rect width="8" height="8" fill="#E6E3DC" />
+                  <path d="M0,0 L8,8" stroke="#281805" strokeWidth="1" />
+                </pattern>
+                <pattern
+                  id="doughnut-pattern-dot"
+                  patternUnits="userSpaceOnUse"
+                  width="8"
+                  height="8"
+                >
+                  <rect width="8" height="8" fill="#E6E3DC" />
+                  <circle cx="4" cy="4" r="1.2" fill="#281805" />
+                </pattern>
+                <pattern
+                  id="doughnut-pattern-cross-hatch"
+                  patternUnits="userSpaceOnUse"
+                  width="8"
+                  height="8"
+                >
+                  <rect width="8" height="8" fill="#E6E3DC" />
+                  <path
+                    d="M0,8 L8,0 M0,0 L8,8"
+                    stroke="#281805"
+                    strokeWidth="1"
+                  />
+                </pattern>
+                <pattern
+                  id="doughnut-pattern-grid"
+                  patternUnits="userSpaceOnUse"
+                  width="8"
+                  height="8"
+                >
+                  <rect width="8" height="8" fill="#E6E3DC" />
+                  <path
+                    d="M0,0 H8 M0,4 H8 M0,8 H8 M0,0 V8 M4,0 V8 M8,0 V8"
+                    stroke="#281805"
+                    strokeWidth="0.75"
+                  />
+                </pattern>
+                <pattern
+                  id="doughnut-pattern-dot-condensed"
+                  patternUnits="userSpaceOnUse"
+                  width="6"
+                  height="6"
+                >
+                  <rect width="6" height="6" fill="#E6E3DC" />
+                  <circle cx="1.5" cy="1.5" r="0.8" fill="#281805" />
+                  <circle cx="4.5" cy="4.5" r="0.8" fill="#281805" />
+                </pattern>
+              </defs>
+            )}
             {arcs.map((a, i) => (
               <path
                 key={i}
                 d={a.path}
-                fill={a.color}
+                fill={
+                  config.palette === "pattern-fill"
+                    ? `url(#doughnut-pattern-${DOUGHNUT_PATTERN_TYPES[i % DOUGHNUT_PATTERN_TYPES.length]})`
+                    : a.color
+                }
                 stroke={config.segmentBorders ? "var(--color-surface)" : "none"}
                 strokeWidth={config.segmentBorders ? 2 : 0}
               />
