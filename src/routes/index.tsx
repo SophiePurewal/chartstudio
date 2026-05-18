@@ -299,6 +299,12 @@ export function ChartStudioApp() {
     setInserted(false);
   };
 
+  const editInsertedChart = () => {
+    setInserted(false);
+    setInsertError(null);
+    setStep(4);
+  };
+
   useEffect(() => {
     const handleMessage = (
       event: MessageEvent<{ pluginMessage?: FigmaToUiMessage }>,
@@ -457,7 +463,7 @@ export function ChartStudioApp() {
                 inserted={inserted}
                 inserting={inserting}
                 insertError={insertError}
-                onEdit={() => setStep(4)}
+                onEdit={editInsertedChart}
                 onAnother={reset}
               />
             )}

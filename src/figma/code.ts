@@ -10,6 +10,7 @@ type SceneNode = {
   y: number;
   constraints?: { horizontal: ConstraintValue; vertical: ConstraintValue };
   resize?: (width: number, height: number) => void;
+  constrainProportions?: boolean;
   rotation?: number;
   appendChild?: (node: SceneNode) => void;
   remove?: () => void;
@@ -433,19 +434,11 @@ function createEditableLineChart(payload: ChartPayload): FrameNode {
       if (payload.showPoints) {
         points.forEach((point) => {
           contentFrame.appendChild(
-            withConstraints(
-              createEllipse(
-                `${seriesName} data point · ${point.label}`,
-                point.x - 4,
-                point.y - 4,
-                8,
-                8,
-                colors[seriesIndex % colors.length],
-                COLORS.background,
-                1.5,
-              ),
-              "SCALE",
-              "SCALE",
+            createLinePointMarker(
+              `${seriesName} data point · ${point.label}`,
+              point.x,
+              point.y,
+              colors[seriesIndex % colors.length],
             ),
           );
           if (payload.showValues) {
@@ -510,6 +503,7 @@ function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
   }));
   const total = values.reduce((sum, row) => sum + row.value, 0);
   const outerRadius = 132;
+  const diameter = outerRadius * 2;
   const innerRadius = Math.max(
     32,
     Math.min(112, outerRadius * (payload.innerRadius / 100)),
@@ -517,13 +511,25 @@ function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
   const chartX =
     payload.showLegend && payload.legendPos === "right" ? 104 : 228;
   const chartY = payload.title ? 112 : 72;
-  const centerX = chartX + outerRadius;
-  const centerY = chartY + outerRadius;
+  const centerX = outerRadius;
+  const centerY = outerRadius;
+  const doughnutFrame = withConstraints(
+    createTransparentFrame(
+      "Doughnut chart area",
+      chartX,
+      chartY,
+      diameter,
+      diameter,
+    ),
+    payload.showLegend && payload.legendPos === "right" ? "MIN" : "CENTER",
+    "CENTER",
+  );
+  doughnutFrame.constrainProportions = true;
   let angle = -Math.PI / 2;
 
   values.forEach((row, index) => {
     const nextAngle = angle + (row.value / total) * Math.PI * 2;
-    contentFrame.appendChild(
+    doughnutFrame.appendChild(
       withConstraints(
         createFilledVectorPath(
           `Doughnut Segment ${index + 1} · ${row.label}`,
@@ -539,23 +545,23 @@ function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
     angle = nextAngle;
   });
 
-  contentFrame.appendChild(
-    withConstraints(
-      createEllipse(
-        "Doughnut Center Hole",
-        centerX - innerRadius,
-        centerY - innerRadius,
-        innerRadius * 2,
-        innerRadius * 2,
-        COLORS.background,
-      ),
-      "SCALE",
-      "SCALE",
+  const centerHole = withConstraints(
+    createEllipse(
+      "Doughnut Center Hole",
+      centerX - innerRadius,
+      centerY - innerRadius,
+      innerRadius * 2,
+      innerRadius * 2,
+      COLORS.background,
     ),
+    "SCALE",
+    "SCALE",
   );
+  centerHole.constrainProportions = true;
+  doughnutFrame.appendChild(centerHole);
 
   if (payload.showValues || payload.showPercent) {
-    contentFrame.appendChild(
+    doughnutFrame.appendChild(
       withConstraints(
         createText(
           payload.showPercent ? "100%" : formatNumber(total, payload),
@@ -568,11 +574,11 @@ function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
           24,
           "CENTER",
         ),
-        "SCALE",
-        "SCALE",
+        "CENTER",
+        "CENTER",
       ),
     );
-    contentFrame.appendChild(
+    doughnutFrame.appendChild(
       withConstraints(
         createText(
           "Total",
@@ -585,11 +591,12 @@ function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
           16,
           "CENTER",
         ),
-        "SCALE",
-        "SCALE",
+        "CENTER",
+        "CENTER",
       ),
     );
   }
+  contentFrame.appendChild(doughnutFrame);
 
   if (payload.showLegend) {
     drawDoughnutLegend(
@@ -853,34 +860,69 @@ function drawAxisLabels(
   plotHeight: number,
 ) {
   if (payload.xLabel) {
-    frame.appendChild(
+    const xLabelArea = withConstraints(
+      createTransparentFrame(
+        "X axis label area",
+        padding.left,
+        padding.top + plotHeight + 34,
+        plotWidth,
+        28,
+      ),
+      "STRETCH",
+      "MAX",
+    );
+    const xLabel = withConstraints(
       createText(
         payload.xLabel,
         12,
         FONT_MEDIUM,
         COLORS.text,
-        padding.left,
-        padding.top + plotHeight + 42,
+        0,
+        5,
         plotWidth,
         18,
         "CENTER",
       ),
-    );
-  }
-  if (payload.yLabel) {
-    const yLabel = createText(
-      payload.yLabel,
-      12,
-      FONT_MEDIUM,
-      COLORS.text,
-      18,
-      padding.top + plotHeight / 2 + 54,
-      plotHeight,
-      18,
+      "STRETCH",
       "CENTER",
     );
+    xLabel.name = "X axis label";
+    xLabelArea.appendChild(xLabel);
+    frame.appendChild(xLabelArea);
+  }
+
+  if (payload.yLabel) {
+    const yLabelAreaWidth = 48;
+    const yLabelArea = withConstraints(
+      createTransparentFrame(
+        "Y axis label area",
+        0,
+        padding.top,
+        yLabelAreaWidth,
+        plotHeight,
+      ),
+      "MIN",
+      "STRETCH",
+    );
+    const yLabel = withConstraints(
+      createText(
+        payload.yLabel,
+        12,
+        FONT_MEDIUM,
+        COLORS.text,
+        (yLabelAreaWidth - plotHeight) / 2,
+        (plotHeight - 18) / 2,
+        plotHeight,
+        18,
+        "CENTER",
+      ),
+      "CENTER",
+      "CENTER",
+    );
+    yLabel.name = "Y axis label";
     yLabel.rotation = -90;
-    frame.appendChild(yLabel);
+    yLabelArea.appendChild(yLabel);
+    frame.appendChild(yLabelArea);
   }
 }
 
@@ -892,35 +934,66 @@ function drawLegend(
   height: number,
 ) {
   const colors = PALETTES[payload.palette].map(hexToRgb);
-  let x = padding.left;
-  const y = height - 28;
+  const legendFrame = withConstraints(
+    createTransparentFrame(
+      "Chart legend",
+      padding.left,
+      height - 32,
+      plotWidth,
+      24,
+    ),
+    "STRETCH",
+    "MAX",
+  );
+  const itemWidth = Math.min(118, plotWidth / payload.seriesNames.length);
+
   payload.seriesNames.forEach((name, index) => {
-    frame.appendChild(
-      createRectangle(
-        `Legend color · ${name}`,
-        x,
-        y + 2,
-        10,
-        10,
-        colors[index % colors.length],
-        2,
+    const itemFrame = withConstraints(
+      createTransparentFrame(
+        `Legend item · ${name}`,
+        index * itemWidth,
+        0,
+        itemWidth,
+        20,
+      ),
+      "SCALE",
+      "CENTER",
+    );
+    itemFrame.appendChild(
+      withConstraints(
+        createRectangle(
+          `Legend color · ${name}`,
+          0,
+          5,
+          10,
+          10,
+          colors[index % colors.length],
+          2,
+        ),
+        "MIN",
+        "CENTER",
       ),
     );
-    frame.appendChild(
-      createText(
-        name,
-        11,
-        FONT_REGULAR,
-        COLORS.mutedText,
-        x + 16,
-        y,
-        90,
-        16,
-        "LEFT",
+    itemFrame.appendChild(
+      withConstraints(
+        createText(
+          name,
+          11,
+          FONT_REGULAR,
+          COLORS.mutedText,
+          16,
+          2,
+          Math.max(24, itemWidth - 20),
+          16,
+          "LEFT",
+        ),
+        "STRETCH",
+        "CENTER",
       ),
     );
-    x += Math.min(118, plotWidth / payload.seriesNames.length);
+    legendFrame.appendChild(itemFrame);
   });
+  frame.appendChild(legendFrame);
 }
 
 function drawDoughnutLegend(
@@ -933,60 +1006,94 @@ function drawDoughnutLegend(
   chartY: number,
   outerRadius: number,
 ) {
+  const columns = payload.legendPos === "bottom" ? 2 : 1;
+  const rowWidth = payload.legendPos === "right" ? 220 : 250;
+  const rowHeight = 26;
   const legendX =
     payload.legendPos === "right" ? chartX + outerRadius * 2 + 52 : 96;
   const legendY =
     payload.legendPos === "right" ? chartY + 24 : chartY + outerRadius * 2 + 28;
-  const rowWidth = payload.legendPos === "right" ? 220 : 250;
+  const legendFrame = withConstraints(
+    createTransparentFrame(
+      "Chart legend",
+      legendX,
+      legendY,
+      rowWidth * columns + (columns - 1) * 20,
+      Math.ceil(values.length / columns) * rowHeight,
+    ),
+    payload.legendPos === "right" ? "MAX" : "CENTER",
+    payload.legendPos === "right" ? "CENTER" : "MAX",
+  );
+
   values.forEach((row, index) => {
-    const x =
-      payload.legendPos === "bottom" && index % 2 === 1
-        ? legendX + 270
-        : legendX;
-    const y =
-      legendY +
-      Math.floor(index / (payload.legendPos === "bottom" ? 2 : 1)) * 26;
-    frame.appendChild(
-      createRectangle(
-        `Legend color · ${row.label}`,
-        x,
-        y + 4,
-        12,
-        12,
-        colors[index % colors.length],
-        3,
+    const column = payload.legendPos === "bottom" ? index % 2 : 0;
+    const legendRow = Math.floor(index / columns);
+    const itemFrame = withConstraints(
+      createTransparentFrame(
+        `Legend item · ${row.label}`,
+        column * (rowWidth + 20),
+        legendRow * rowHeight,
+        rowWidth,
+        20,
+      ),
+      "SCALE",
+      "SCALE",
+    );
+    itemFrame.appendChild(
+      withConstraints(
+        createRectangle(
+          `Legend color · ${row.label}`,
+          0,
+          4,
+          12,
+          12,
+          colors[index % colors.length],
+          3,
+        ),
+        "MIN",
+        "CENTER",
       ),
     );
-    frame.appendChild(
-      createText(
-        row.label,
-        11,
-        FONT_REGULAR,
-        COLORS.text,
-        x + 18,
-        y,
-        rowWidth - 92,
-        20,
-        "LEFT",
+    itemFrame.appendChild(
+      withConstraints(
+        createText(
+          row.label,
+          11,
+          FONT_REGULAR,
+          COLORS.text,
+          18,
+          0,
+          rowWidth - 92,
+          20,
+          "LEFT",
+        ),
+        "STRETCH",
+        "CENTER",
       ),
     );
     const valueLabel = payload.showPercent
       ? `${Math.round((row.value / total) * 100)}%`
       : formatNumber(row.value, payload);
-    frame.appendChild(
-      createText(
-        valueLabel,
-        11,
-        FONT_MEDIUM,
-        COLORS.mutedText,
-        x + rowWidth - 76,
-        y,
-        76,
-        20,
-        "RIGHT",
+    itemFrame.appendChild(
+      withConstraints(
+        createText(
+          valueLabel,
+          11,
+          FONT_MEDIUM,
+          COLORS.mutedText,
+          rowWidth - 76,
+          0,
+          76,
+          20,
+          "RIGHT",
+        ),
+        "MAX",
+        "CENTER",
       ),
     );
+    legendFrame.appendChild(itemFrame);
   });
+  frame.appendChild(legendFrame);
 }
 
 function drawDoughnutLabels(
@@ -1006,17 +1113,21 @@ function drawDoughnutLabels(
     const x = chartX + outerRadius + Math.cos(mid) * (outerRadius + 42);
     const y = chartY + outerRadius + Math.sin(mid) * (outerRadius + 28);
     frame.appendChild(
-      createText(
-        payload.showPercent
-          ? `${row.label} · ${Math.round((row.value / total) * 100)}%`
-          : row.label,
-        11,
-        FONT_MEDIUM,
-        colors[index % colors.length],
-        x - 52,
-        y - 10,
-        104,
-        20,
+      withConstraints(
+        createText(
+          payload.showPercent
+            ? `${row.label} · ${Math.round((row.value / total) * 100)}%`
+            : row.label,
+          11,
+          FONT_MEDIUM,
+          colors[index % colors.length],
+          x - 52,
+          y - 10,
+          104,
+          20,
+          "CENTER",
+        ),
+        "CENTER",
         "CENTER",
       ),
     );
@@ -1039,6 +1150,23 @@ function withConstraints<T extends SceneNode>(
 ): T {
   setConstraints(node, horizontal, vertical);
   return node;
+}
+
+function createTransparentFrame(
+  name: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): FrameNode {
+  const frame = figma.createFrame();
+  frame.name = name;
+  frame.x = x;
+  frame.y = y;
+  if (frame.resize) frame.resize(width, height);
+  frame.fills = [];
+  frame.clipsContent = false;
+  return frame;
 }
 
 function createRectangle(
@@ -1079,6 +1207,27 @@ function createEllipse(
   ellipse.strokes = strokeColor ? [solid(strokeColor)] : [];
   ellipse.strokeWeight = strokeWeight;
   return ellipse;
+}
+
+function createLinePointMarker(
+  name: string,
+  centerX: number,
+  centerY: number,
+  color: RGB,
+): FrameNode {
+  const marker = withConstraints(
+    createTransparentFrame(name, centerX - 4, centerY - 4, 8, 8),
+    "SCALE",
+    "SCALE",
+  );
+  const dot = withConstraints(
+    createEllipse(`${name} circle`, 0, 0, 8, 8, color, COLORS.background, 1.5),
+    "CENTER",
+    "CENTER",
+  );
+  dot.constrainProportions = true;
+  marker.appendChild(dot);
+  return marker;
 }
 
 function createText(
