@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { BarChartPayload, FigmaToUiMessage } from "@/figma/types";
 
 type ChartType = "line" | "bar" | "doughnut";
 type DataMode = "paste" | "manual";
@@ -61,10 +62,8 @@ type Config = {
 };
 
 const SAMPLE: Record<ChartType, string> = {
-  line:
-    "Month, Revenue, Costs\nJan, 12400, 8200\nFeb, 13800, 8900\nMar, 15200, 9400\nApr, 14600, 9100\nMay, 16100, 9800\nJun, 17500, 10200",
-  bar:
-    "Quarter, 2024, 2025\nQ1, 48200, 52100\nQ2, 52900, 58700\nQ3, 61300, 64400\nQ4, 67400, 71200",
+  line: "Month, Revenue, Costs\nJan, 12400, 8200\nFeb, 13800, 8900\nMar, 15200, 9400\nApr, 14600, 9100\nMay, 16100, 9800\nJun, 17500, 10200",
+  bar: "Quarter, 2024, 2025\nQ1, 48200, 52100\nQ2, 52900, 58700\nQ3, 61300, 64400\nQ4, 67400, 71200",
   doughnut:
     "Category, Spend\nSalaries, 42000\nOps, 18500\nMarketing, 12300\nR&D, 9400\nOther, 4800",
 };
@@ -111,7 +110,11 @@ const LINE_STYLES: LineStyle[] = [
   { name: "Dash 02", dash: "24 12", linecap: "butt" },
 ];
 
-const SERIES_LIMIT: Record<ChartType, number> = { line: 4, bar: 6, doughnut: 1 };
+const SERIES_LIMIT: Record<ChartType, number> = {
+  line: 4,
+  bar: 6,
+  doughnut: 1,
+};
 
 const initial: Config = {
   type: null,
@@ -196,7 +199,8 @@ function parseData(
 
   // Fill series names if missing
   const numSeries = rows.reduce((m, r) => Math.max(m, r.values.length), 0);
-  while (seriesNames.length < numSeries) seriesNames.push(`Series ${seriesNames.length + 1}`);
+  while (seriesNames.length < numSeries)
+    seriesNames.push(`Series ${seriesNames.length + 1}`);
   seriesNames = seriesNames.slice(0, Math.min(numSeries, maxSeries));
 
   return { rows, seriesNames, errors };
@@ -216,15 +220,17 @@ function fmt(n: number, c: Config) {
   return new Intl.NumberFormat("en-GB", opts).format(n);
 }
 
-function Index() {
+export function ChartStudioApp() {
   const [step, setStep] = useState(1);
   const [config, setConfig] = useState<Config>(initial);
   const [inserted, setInserted] = useState(false);
   const [inserting, setInserting] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [previewExpanded, setPreviewExpanded] = useState(false);
+  const [insertError, setInsertError] = useState<string | null>(null);
 
-  const update = (patch: Partial<Config>) => setConfig((c) => ({ ...c, ...patch }));
+  const update = (patch: Partial<Config>) =>
+    setConfig((c) => ({ ...c, ...patch }));
 
   const limit = config.type ? SERIES_LIMIT[config.type] : 1;
 
@@ -233,7 +239,10 @@ function Index() {
     if (config.mode === "paste") return parseData(config.paste, limit);
     // manual mode
     const rows = config.rows
-      .filter((r) => r.label.trim() && r.values.some((v) => v.trim() && !isNaN(Number(v))))
+      .filter(
+        (r) =>
+          r.label.trim() && r.values.some((v) => v.trim() && !isNaN(Number(v))),
+      )
       .map((r) => ({
         label: r.label.trim(),
         values: r.values.slice(0, limit).map((v) => v.trim()),
@@ -254,7 +263,8 @@ function Index() {
     if (config.type !== "doughnut") return [];
     const w: string[] = [];
     const nums = dataPoints.map((d) => Number(d.values[0] ?? 0));
-    if (nums.some((n) => n < 0)) w.push("Doughnut charts need positive values.");
+    if (nums.some((n) => n < 0))
+      w.push("Doughnut charts need positive values.");
     if (nums.length && nums.reduce((a, b) => a + b, 0) === 0)
       w.push("Total is zero — nothing to show.");
     if (nums.length > 8)
@@ -279,12 +289,62 @@ function Index() {
     setInserted(false);
   };
 
+  useEffect(() => {
+    const handleMessage = (
+      event: MessageEvent<{ pluginMessage?: FigmaToUiMessage }>,
+    ) => {
+      const pluginMessage = event.data.pluginMessage;
+      if (!pluginMessage) return;
+
+      if (pluginMessage.type === "chart-created") {
+        setInserting(false);
+        setInserted(true);
+        setInsertError(null);
+      }
+
+      if (pluginMessage.type === "chart-error") {
+        setInserting(false);
+        setInsertError(pluginMessage.message);
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
+
   const insert = () => {
+    if (config.type !== "bar") {
+      setInsertError(
+        "This first Figma plugin version can only create editable bar charts. Choose Bar to continue.",
+      );
+      return;
+    }
+
+    const payload: BarChartPayload = {
+      type: config.type,
+      rows: dataPoints,
+      seriesNames,
+      title: config.title,
+      xLabel: config.xLabel,
+      yLabel: config.yLabel,
+      numberFormat: config.numberFormat,
+      thousands: config.thousands,
+      showLegend: config.showLegend,
+      showValues: config.showValues,
+      showGrid: config.showGrid,
+      showAxisLabels: config.showAxisLabels,
+      barRadius: config.barRadius,
+      barSpacing: config.barSpacing,
+      barLayout: config.barLayout,
+      palette: config.palette,
+    };
+
     setInserting(true);
-    setTimeout(() => {
-      setInserting(false);
-      setInserted(true);
-    }, 900);
+    setInsertError(null);
+    parent.postMessage(
+      { pluginMessage: { type: "create-bar-chart", payload } },
+      "*",
+    );
   };
 
   return (
@@ -316,7 +376,9 @@ function Index() {
                 <div className="size-6 rounded-md bg-primary/10 grid place-items-center">
                   <BarChart3 className="size-3.5 text-primary" />
                 </div>
-                <span className="text-[13px] font-semibold tracking-tight">ChartStudio</span>
+                <span className="text-[13px] font-semibold tracking-tight">
+                  ChartStudio
+                </span>
               </div>
               <div className="flex items-center gap-0.5">
                 <button
@@ -335,11 +397,21 @@ function Index() {
                 </button>
               </div>
             </div>
-            <Stepper step={step} labels={stepLabels} onJump={(s) => s < step && setStep(s)} />
+            <Stepper
+              step={step}
+              labels={stepLabels}
+              onJump={(s) => s < step && setStep(s)}
+            />
           </header>
 
           <main className="flex-1 overflow-y-auto bg-surface">
-            {step === 1 && <Screen1 config={config} update={update} onPick={() => setStep(2)} />}
+            {step === 1 && (
+              <Screen1
+                config={config}
+                update={update}
+                onPick={() => setStep(2)}
+              />
+            )}
             {step === 2 && (
               <Screen2
                 config={config}
@@ -351,7 +423,9 @@ function Index() {
               />
             )}
             {step === 3 && <Screen3 config={config} update={update} />}
-            {step === 4 && <Screen4 config={config} update={update} numSeries={numSeries} />}
+            {step === 4 && (
+              <Screen4 config={config} update={update} numSeries={numSeries} />
+            )}
             {step === 5 && (
               <Screen5
                 config={config}
@@ -359,6 +433,7 @@ function Index() {
                 seriesNames={seriesNames}
                 inserted={inserted}
                 inserting={inserting}
+                insertError={insertError}
                 onEdit={() => setStep(4)}
                 onAnother={reset}
               />
@@ -404,7 +479,7 @@ function Index() {
                     </>
                   ) : (
                     <>
-                      Insert chart <Check className="size-3.5" />
+                      Create Chart <Check className="size-3.5" />
                     </>
                   )}
                 </button>
@@ -464,7 +539,11 @@ function Stepper({
                   {n}
                 </span>
                 <span
-                  className={cn(active ? "text-foreground font-medium" : "text-muted-foreground")}
+                  className={cn(
+                    active
+                      ? "text-foreground font-medium"
+                      : "text-muted-foreground",
+                  )}
                 >
                   {l}
                 </span>
@@ -487,13 +566,26 @@ function Screen1({
   update: (p: Partial<Config>) => void;
   onPick: () => void;
 }) {
-  const items: { id: ChartType; label: string; sub: string; icon: typeof LineChartIcon }[] = [
+  const items: {
+    id: ChartType;
+    label: string;
+    sub: string;
+    icon: typeof LineChartIcon;
+  }[] = [
     { id: "line", label: "Line", sub: "Up to 4 series", icon: LineChartIcon },
-    { id: "bar", label: "Bar", sub: "Up to 6 series, grouped or stacked", icon: BarChart3 },
+    {
+      id: "bar",
+      label: "Bar",
+      sub: "Up to 6 series, grouped or stacked",
+      icon: BarChart3,
+    },
     { id: "doughnut", label: "Doughnut", sub: "Parts of a whole", icon: Donut },
   ];
   return (
-    <Section title="Create a chart" subtitle="Pick a chart type — options will adapt automatically.">
+    <Section
+      title="Create a chart"
+      subtitle="Pick a chart type — options will adapt automatically."
+    >
       <div className="grid grid-cols-2 gap-2">
         {items.map((it) => {
           const active = config.type === it.id;
@@ -520,7 +612,9 @@ function Screen1({
                   <div className="text-[12.5px] font-semibold flex items-center gap-1.5">
                     <Icon className="size-3.5" /> {it.label}
                   </div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5">{it.sub}</div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">
+                    {it.sub}
+                  </div>
                 </div>
                 {active && <Check className="size-3.5 text-primary" />}
               </div>
@@ -565,7 +659,14 @@ function ChartThumb({ type }: { type: ChartType }) {
     );
   return (
     <svg viewBox="0 0 50 50" className="w-2/3">
-      <circle cx="25" cy="25" r="18" fill="none" strokeWidth="10" className="stroke-muted-foreground/30" />
+      <circle
+        cx="25"
+        cy="25"
+        r="18"
+        fill="none"
+        strokeWidth="10"
+        className="stroke-muted-foreground/30"
+      />
       <circle
         cx="25"
         cy="25"
@@ -598,7 +699,11 @@ function Screen2({
   limit: number;
 }) {
   const isDoughnut = config.type === "doughnut";
-  const catLabel = isDoughnut ? "Segment" : config.type === "bar" ? "Category" : "X label";
+  const catLabel = isDoughnut
+    ? "Segment"
+    : config.type === "bar"
+      ? "Category"
+      : "X label";
 
   const useSample = () => {
     update({ paste: SAMPLE[config.type ?? "line"], mode: "paste" });
@@ -607,7 +712,10 @@ function Screen2({
   // Manual mode helpers
   const currentSeriesCount = Math.max(
     1,
-    Math.min(limit, config.rows[0]?.values.length ?? config.seriesNames.length ?? 1),
+    Math.min(
+      limit,
+      config.rows[0]?.values.length ?? config.seriesNames.length ?? 1,
+    ),
   );
 
   const setSeriesCount = (n: number) => {
@@ -658,7 +766,10 @@ function Screen2({
               : `Column 1 = categories. Columns 2–${limit + 1} = series. First row can be header names.`}
           </p>
           <div className="flex items-center gap-2">
-            <button onClick={useSample} className="text-[11.5px] text-primary hover:underline">
+            <button
+              onClick={useSample}
+              className="text-[11.5px] text-primary hover:underline"
+            >
               Use sample data
             </button>
             {config.paste && (
@@ -704,7 +815,8 @@ function Screen2({
                     value={config.seriesNames[i] ?? `Series ${i + 1}`}
                     onChange={(v) => {
                       const names = [...config.seriesNames];
-                      while (names.length <= i) names.push(`Series ${names.length + 1}`);
+                      while (names.length <= i)
+                        names.push(`Series ${names.length + 1}`);
                       names[i] = v;
                       update({ seriesNames: names });
                     }}
@@ -768,7 +880,9 @@ function Screen2({
                     />
                   ))}
                   <button
-                    onClick={() => update({ rows: config.rows.filter((_, j) => j !== i) })}
+                    onClick={() =>
+                      update({ rows: config.rows.filter((_, j) => j !== i) })
+                    }
                     className="size-7 grid place-items-center rounded text-muted-foreground hover:bg-muted hover:text-destructive"
                   >
                     <Trash2 className="size-3.5" />
@@ -840,7 +954,8 @@ function Screen2({
         ) : dataPoints.length >= 2 ? (
           <Banner tone="success">
             Found {dataPoints.length} {isDoughnut ? "segments" : "rows"} ·{" "}
-            {seriesNames.length} {seriesNames.length === 1 ? "series" : "series"}
+            {seriesNames.length}{" "}
+            {seriesNames.length === 1 ? "series" : "series"}
             {seriesNames.length > 1 && `: ${seriesNames.join(", ")}`}.
           </Banner>
         ) : (
@@ -854,10 +969,19 @@ function Screen2({
 }
 
 /* ---------- SCREEN 3 ---------- */
-function Screen3({ config, update }: { config: Config; update: (p: Partial<Config>) => void }) {
+function Screen3({
+  config,
+  update,
+}: {
+  config: Config;
+  update: (p: Partial<Config>) => void;
+}) {
   if (config.type === "doughnut") {
     return (
-      <Section title="Labels & legend" subtitle="Name your slices and decide how the legend reads.">
+      <Section
+        title="Labels & legend"
+        subtitle="Name your slices and decide how the legend reads."
+      >
         <Group label="Title">
           <Field label="Chart title">
             <Input
@@ -869,7 +993,11 @@ function Screen3({ config, update }: { config: Config; update: (p: Partial<Confi
         </Group>
 
         <Group label="Legend & labels">
-          <Toggle label="Show legend" value={config.showLegend} onChange={(v) => update({ showLegend: v })} />
+          <Toggle
+            label="Show legend"
+            value={config.showLegend}
+            onChange={(v) => update({ showLegend: v })}
+          />
           <Toggle
             label="Show percentages"
             value={config.showPercent}
@@ -915,7 +1043,10 @@ function Screen3({ config, update }: { config: Config; update: (p: Partial<Confi
   }
 
   return (
-    <Section title="Axes & labels" subtitle="Names appear in the preview as you type.">
+    <Section
+      title="Axes & labels"
+      subtitle="Names appear in the preview as you type."
+    >
       <Group label="Title">
         <Field label="Chart title">
           <Input
@@ -941,7 +1072,9 @@ function Screen3({ config, update }: { config: Config; update: (p: Partial<Confi
             placeholder="Revenue (£)"
           />
         </Field>
-        <p className="text-[11px] text-muted-foreground">Leave blank to hide.</p>
+        <p className="text-[11px] text-muted-foreground">
+          Leave blank to hide.
+        </p>
       </Group>
 
       <Group label="Formatting">
@@ -989,7 +1122,10 @@ function Screen4({
   const [adv, setAdv] = useState(false);
 
   return (
-    <Section title="Style" subtitle="Tweak the essentials. Preview updates as you go.">
+    <Section
+      title="Style"
+      subtitle="Tweak the essentials. Preview updates as you go."
+    >
       {(config.type === "line" || config.type === "bar") && (
         <Group label="Color palette">
           <Segmented
@@ -1016,7 +1152,8 @@ function Screen4({
           {numSeries > 1 && (
             <p className="text-[11px] text-muted-foreground">
               Each of the {numSeries} series gets a colour from the palette.
-              {config.type === "line" && " Line styles also vary for accessibility."}
+              {config.type === "line" &&
+                " Line styles also vary for accessibility."}
             </p>
           )}
         </Group>
@@ -1033,7 +1170,11 @@ function Screen4({
                 onChange={(v) => update({ lineWeight: v })}
               />
             </Field>
-            <Toggle label="Smooth line" value={config.smooth} onChange={(v) => update({ smooth: v })} />
+            <Toggle
+              label="Smooth line"
+              value={config.smooth}
+              onChange={(v) => update({ smooth: v })}
+            />
             <Toggle
               label="Show points"
               value={config.showPoints}
@@ -1041,7 +1182,11 @@ function Screen4({
             />
           </Group>
           <Group label="Grid & axes">
-            <Toggle label="Show gridlines" value={config.showGrid} onChange={(v) => update({ showGrid: v })} />
+            <Toggle
+              label="Show gridlines"
+              value={config.showGrid}
+              onChange={(v) => update({ showGrid: v })}
+            />
             <Toggle
               label="Show axis ticks"
               value={config.showAxisLabels}
@@ -1066,7 +1211,9 @@ function Screen4({
               <Segmented
                 size="sm"
                 value={config.barSpacing}
-                onChange={(v) => update({ barSpacing: v as Config["barSpacing"] })}
+                onChange={(v) =>
+                  update({ barSpacing: v as Config["barSpacing"] })
+                }
                 options={[
                   { value: "compact", label: "Compact" },
                   { value: "default", label: "Default" },
@@ -1079,7 +1226,9 @@ function Screen4({
                 <Segmented
                   size="sm"
                   value={config.barLayout}
-                  onChange={(v) => update({ barLayout: v as Config["barLayout"] })}
+                  onChange={(v) =>
+                    update({ barLayout: v as Config["barLayout"] })
+                  }
                   options={[
                     { value: "grouped", label: "Grouped" },
                     { value: "stacked", label: "Stacked" },
@@ -1089,7 +1238,11 @@ function Screen4({
             )}
           </Group>
           <Group label="Axes & grid">
-            <Toggle label="Show gridlines" value={config.showGrid} onChange={(v) => update({ showGrid: v })} />
+            <Toggle
+              label="Show gridlines"
+              value={config.showGrid}
+              onChange={(v) => update({ showGrid: v })}
+            />
             <Toggle
               label="Show axis ticks"
               value={config.showAxisLabels}
@@ -1160,7 +1313,9 @@ function Screen4({
               <Segmented
                 size="sm"
                 value={config.legendPos}
-                onChange={(v) => update({ legendPos: v as Config["legendPos"] })}
+                onChange={(v) =>
+                  update({ legendPos: v as Config["legendPos"] })
+                }
                 options={[
                   { value: "right", label: "Right" },
                   { value: "bottom", label: "Bottom" },
@@ -1176,7 +1331,9 @@ function Screen4({
         className="mt-1 w-full flex items-center justify-between px-2 py-2 text-[12px] font-medium rounded hover:bg-muted text-muted-foreground"
       >
         <span>Advanced</span>
-        <ChevronDown className={cn("size-3.5 transition-transform", adv && "rotate-180")} />
+        <ChevronDown
+          className={cn("size-3.5 transition-transform", adv && "rotate-180")}
+        />
       </button>
       {adv && (
         <div className="px-2 pb-2 space-y-2 text-[11.5px] text-muted-foreground">
@@ -1206,12 +1363,19 @@ function Screen4({
           {config.type === "doughnut" && (
             <>
               <Field label="Sort segments">
-                <Select value="Largest first" options={["None", "Largest first"]} />
+                <Select
+                  value="Largest first"
+                  options={["None", "Largest first"]}
+                />
               </Field>
               <Field label="Min slice threshold">
                 <Select
                   value="Off"
-                  options={["Off", "Group <2% into 'Other'", "Group <5% into 'Other'"]}
+                  options={[
+                    "Off",
+                    "Group <2% into 'Other'",
+                    "Group <5% into 'Other'",
+                  ]}
                 />
               </Field>
             </>
@@ -1229,6 +1393,7 @@ function Screen5({
   seriesNames,
   inserted,
   inserting,
+  insertError,
   onEdit,
   onAnother,
 }: {
@@ -1237,15 +1402,23 @@ function Screen5({
   seriesNames: string[];
   inserted: boolean;
   inserting: boolean;
+  insertError: string | null;
   onEdit: () => void;
   onAnother: () => void;
 }) {
   return (
-    <Section title="Ready to insert" subtitle="Review your chart before adding it to the canvas.">
+    <Section
+      title="Ready to insert"
+      subtitle="Review your chart before adding it to the canvas."
+    >
       <div className="rounded-lg border border-border bg-muted/40 p-3 space-y-2 text-[12px]">
         <SummaryRow
           k="Chart type"
-          v={config.type ? config.type[0].toUpperCase() + config.type.slice(1) : "—"}
+          v={
+            config.type
+              ? config.type[0].toUpperCase() + config.type.slice(1)
+              : "—"
+          }
         />
         <SummaryRow
           k="Data"
@@ -1254,7 +1427,10 @@ function Screen5({
           } · ${seriesNames.length} series`}
         />
         {config.type === "bar" && seriesNames.length > 1 && (
-          <SummaryRow k="Layout" v={config.barLayout === "stacked" ? "Stacked" : "Grouped"} />
+          <SummaryRow
+            k="Layout"
+            v={config.barLayout === "stacked" ? "Stacked" : "Grouped"}
+          />
         )}
         {config.type === "doughnut" ? (
           <SummaryRow
@@ -1264,7 +1440,10 @@ function Screen5({
             }`}
           />
         ) : (
-          <SummaryRow k="Axis labels" v={`X: ${config.xLabel || "—"}, Y: ${config.yLabel || "—"}`} />
+          <SummaryRow
+            k="Axis labels"
+            v={`X: ${config.xLabel || "—"}, Y: ${config.yLabel || "—"}`}
+          />
         )}
         <SummaryRow
           k="Format"
@@ -1277,6 +1456,14 @@ function Screen5({
           }
         />
       </div>
+
+      {insertError && (
+        <div className="mt-3">
+          <Banner tone="error" title="Could not create chart">
+            {insertError}
+          </Banner>
+        </div>
+      )}
 
       {inserting && (
         <div className="mt-3 inline-flex items-center gap-2 text-[12px] text-muted-foreground">
@@ -1293,7 +1480,8 @@ function Screen5({
             <div className="flex-1">
               <div className="text-[12.5px] font-semibold">Chart inserted</div>
               <p className="text-[11.5px] text-muted-foreground mt-0.5">
-                Your chart is now on the canvas. Select it to edit styles and text.
+                Your chart is now on the canvas. Select it to edit styles and
+                text.
               </p>
               <div className="flex items-center gap-2 mt-2.5">
                 <button
@@ -1355,7 +1543,10 @@ function PreviewPanel({
         <div className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">
           Live preview
         </div>
-        <button onClick={onToggle} className="text-[10.5px] text-muted-foreground hover:text-foreground">
+        <button
+          onClick={onToggle}
+          className="text-[10.5px] text-muted-foreground hover:text-foreground"
+        >
           {expanded ? "Collapse" : "Expand preview"}
         </button>
       </div>
@@ -1367,8 +1558,14 @@ function PreviewPanel({
         ) : warnings.length ? (
           <div className="h-full flex flex-col items-center justify-center gap-1.5 text-center">
             <TriangleAlert className="size-4 text-warning" />
-            <div className="text-[11.5px] text-foreground font-medium">{warnings[0]}</div>
-            {warnings[1] && <div className="text-[10.5px] text-muted-foreground">{warnings[1]}</div>}
+            <div className="text-[11.5px] text-foreground font-medium">
+              {warnings[0]}
+            </div>
+            {warnings[1] && (
+              <div className="text-[10.5px] text-muted-foreground">
+                {warnings[1]}
+              </div>
+            )}
           </div>
         ) : (
           <ChartRender
@@ -1376,7 +1573,11 @@ function PreviewPanel({
             data={data}
             seriesNames={seriesNames}
             expanded={expanded}
-            note={hasErrors ? "Some rows have issues — preview shows valid data only." : undefined}
+            note={
+              hasErrors
+                ? "Some rows have issues — preview shows valid data only."
+                : undefined
+            }
           />
         )}
       </div>
@@ -1428,23 +1629,34 @@ function ChartRender({
     const LEGEND_H = config.showLegend && numSeries > 1 ? 18 : 0;
     const LEGEND_GAP = LEGEND_H ? 24 : 0;
     const padB =
-      TICKS_H + (X_LABEL_H ? AXIS_LABEL_GAP + X_LABEL_H : 0) + LEGEND_GAP + LEGEND_H;
+      TICKS_H +
+      (X_LABEL_H ? AXIS_LABEL_GAP + X_LABEL_H : 0) +
+      LEGEND_GAP +
+      LEGEND_H;
     const innerW = W - padL - padR;
     const innerH = H - padT - padB;
     const ticks = 4;
 
     // Compute max value depending on chart layout
     let max = 1;
-    if (config.type === "bar" && config.barLayout === "stacked" && numSeries > 1) {
+    if (
+      config.type === "bar" &&
+      config.barLayout === "stacked" &&
+      numSeries > 1
+    ) {
       max = Math.max(
         ...data.map((d) =>
-          d.values.slice(0, numSeries).reduce((a, v) => a + (Number(v) || 0), 0),
+          d.values
+            .slice(0, numSeries)
+            .reduce((a, v) => a + (Number(v) || 0), 0),
         ),
         1,
       );
     } else {
       max = Math.max(
-        ...data.flatMap((d) => d.values.slice(0, numSeries).map((v) => Number(v) || 0)),
+        ...data.flatMap((d) =>
+          d.values.slice(0, numSeries).map((v) => Number(v) || 0),
+        ),
         1,
       );
     }
@@ -1540,9 +1752,14 @@ function ChartRender({
                 });
                 const path = config.smooth
                   ? smoothPath(points)
-                  : points.map((p, i) => `${i === 0 ? "M" : "L"}${p[0]},${p[1]}`).join(" ");
+                  : points
+                      .map((p, i) => `${i === 0 ? "M" : "L"}${p[0]},${p[1]}`)
+                      .join(" ");
                 const c = colorOf(sIdx);
-                const style = numSeries > 1 ? LINE_STYLES[sIdx % LINE_STYLES.length] : LINE_STYLES[0];
+                const style =
+                  numSeries > 1
+                    ? LINE_STYLES[sIdx % LINE_STYLES.length]
+                    : LINE_STYLES[0];
                 const strokeProps = {
                   fill: "none" as const,
                   stroke: c,
@@ -1555,8 +1772,16 @@ function ChartRender({
                   <g key={sIdx}>
                     {style.double ? (
                       <>
-                        <path d={path} {...strokeProps} transform={`translate(0,${-(config.lineWeight / 2 + 0.5)})`} />
-                        <path d={path} {...strokeProps} transform={`translate(0,${config.lineWeight / 2 + 0.5})`} />
+                        <path
+                          d={path}
+                          {...strokeProps}
+                          transform={`translate(0,${-(config.lineWeight / 2 + 0.5)})`}
+                        />
+                        <path
+                          d={path}
+                          {...strokeProps}
+                          transform={`translate(0,${config.lineWeight / 2 + 0.5})`}
+                        />
                       </>
                     ) : (
                       <path d={path} {...strokeProps} />
@@ -1610,7 +1835,11 @@ function ChartRender({
             <>
               {(() => {
                 const gap =
-                  config.barSpacing === "compact" ? 2 : config.barSpacing === "wide" ? 14 : 7;
+                  config.barSpacing === "compact"
+                    ? 2
+                    : config.barSpacing === "wide"
+                      ? 14
+                      : 7;
                 const groupW = (innerW - gap * (data.length - 1)) / data.length;
                 const stacked = config.barLayout === "stacked" && numSeries > 1;
                 const innerGap = 1.5;
@@ -1719,7 +1948,14 @@ function ChartRender({
                   const x = startX + sIdx * itemW;
                   return (
                     <g key={sIdx} transform={`translate(${x}, ${y})`}>
-                      <rect x={0} y={-7} width={8} height={8} rx={1.5} fill={colorOf(sIdx)} />
+                      <rect
+                        x={0}
+                        y={-7}
+                        width={8}
+                        height={8}
+                        rx={1.5}
+                        fill={colorOf(sIdx)}
+                      />
                       <text
                         x={12}
                         y={0}
@@ -1759,7 +1995,11 @@ function ChartRender({
     const start = (acc / total) * Math.PI * 2 - Math.PI / 2;
     acc += d.num;
     const end = (acc / total) * Math.PI * 2 - Math.PI / 2;
-    return { ...d, path: arcPath(r, r, r, ir, start, end), pct: (d.num / total) * 100 };
+    return {
+      ...d,
+      path: arcPath(r, r, r, ir, start, end),
+      pct: (d.num / total) * 100,
+    };
   });
 
   return (
@@ -1776,7 +2016,9 @@ function ChartRender({
       <div
         className={cn(
           "flex-1 flex gap-3 min-h-0",
-          config.legendPos === "bottom" ? "flex-col items-center" : "items-center",
+          config.legendPos === "bottom"
+            ? "flex-col items-center"
+            : "items-center",
         )}
       >
         <div style={{ width: size, height: size }} className="shrink-0">
@@ -1802,11 +2044,19 @@ function ChartRender({
             )}
           >
             {arcs.map((a, i) => (
-              <div key={i} className="flex items-center gap-1.5 text-[10px] min-w-0">
-                <span className="size-2 rounded-sm shrink-0" style={{ background: a.color }} />
+              <div
+                key={i}
+                className="flex items-center gap-1.5 text-[10px] min-w-0"
+              >
+                <span
+                  className="size-2 rounded-sm shrink-0"
+                  style={{ background: a.color }}
+                />
                 <span className="truncate text-foreground">{a.label}</span>
                 <span className="ml-auto tabular-nums text-muted-foreground">
-                  {config.showPercent ? `${a.pct.toFixed(0)}%` : fmt(a.num, config)}
+                  {config.showPercent
+                    ? `${a.pct.toFixed(0)}%`
+                    : fmt(a.num, config)}
                 </span>
               </div>
             ))}
@@ -1829,7 +2079,14 @@ function smoothPath(pts: readonly (readonly [number, number])[]) {
   return d;
 }
 
-function arcPath(cx: number, cy: number, r: number, ir: number, start: number, end: number) {
+function arcPath(
+  cx: number,
+  cy: number,
+  r: number,
+  ir: number,
+  start: number,
+  end: number,
+) {
   const large = end - start > Math.PI ? 1 : 0;
   const x1 = cx + r * Math.cos(start),
     y1 = cy + r * Math.sin(start);
@@ -1850,7 +2107,10 @@ function HelpDrawer({ onClose }: { onClose: () => void }) {
       <div className="w-[280px] h-full bg-surface border-l border-border flex flex-col">
         <div className="h-11 px-3 border-b border-border flex items-center justify-between">
           <span className="text-[13px] font-semibold">Help</span>
-          <button onClick={onClose} className="size-7 grid place-items-center rounded hover:bg-muted">
+          <button
+            onClick={onClose}
+            className="size-7 grid place-items-center rounded hover:bg-muted"
+          >
             <X className="size-3.5" />
           </button>
         </div>
@@ -1873,7 +2133,9 @@ Feb, 13800, 8900`}</pre>
           </div>
           <div>
             <div className="font-semibold mb-1">Shortcuts</div>
-            <div className="text-muted-foreground">⌘/Ctrl + ↵ — Insert chart</div>
+            <div className="text-muted-foreground">
+              ⌘/Ctrl + ↵ — Insert chart
+            </div>
           </div>
         </div>
       </div>
@@ -1895,25 +2157,43 @@ function Section({
     <div className="p-3 space-y-2.5">
       <div>
         <h2 className="text-[14px] font-semibold tracking-tight">{title}</h2>
-        {subtitle && <p className="text-[11.5px] text-muted-foreground mt-0.5">{subtitle}</p>}
+        {subtitle && (
+          <p className="text-[11.5px] text-muted-foreground mt-0.5">
+            {subtitle}
+          </p>
+        )}
       </div>
       {children}
     </div>
   );
 }
 
-function Group({ label, children }: { label: string; children: React.ReactNode }) {
+function Group({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="space-y-1.5">
       <div className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground px-0.5">
         {label}
       </div>
-      <div className="space-y-2 rounded-lg border border-border p-2.5 bg-surface">{children}</div>
+      <div className="space-y-2 rounded-lg border border-border p-2.5 bg-surface">
+        {children}
+      </div>
     </div>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="grid grid-cols-[100px_1fr] items-center gap-2">
       <label className="text-[11.5px] text-muted-foreground">{label}</label>
@@ -2083,7 +2363,7 @@ function Banner({
 }
 
 export const Route = createFileRoute("/")({
-  component: Index,
+  component: ChartStudioApp,
   head: () => ({
     meta: [
       { title: "ChartStudio — Figma Charts Plugin" },
