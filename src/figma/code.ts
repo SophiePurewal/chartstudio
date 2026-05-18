@@ -33,6 +33,7 @@ type TextNode = SceneNode & {
   characters: string;
   fontSize: number;
   fontName: FontName;
+  lineHeight?: { unit: "PIXELS"; value: number };
   fills: Paint[];
   textAlignHorizontal: "LEFT" | "CENTER" | "RIGHT" | "JUSTIFIED";
   textAlignVertical: "TOP" | "CENTER" | "BOTTOM";
@@ -119,11 +120,16 @@ const LINE_STYLES: Record<
 };
 
 const COLORS = {
-  text: hexToRgb("#111827"),
-  mutedText: hexToRgb("#6B7280"),
-  grid: hexToRgb("#E5E7EB"),
-  axis: hexToRgb("#374151"),
+  text: hexToRgb("#281805"),
+  mutedText: hexToRgb("#281805"),
+  grid: hexToRgb("#CAC8C2"),
+  axis: hexToRgb("#281805"),
   background: hexToRgb("#FFFFFF"),
+};
+
+const TEXT_STYLES = {
+  title: { fontSize: 32, lineHeight: 40, font: FONT_REGULAR },
+  axisTitle: { fontSize: 14, lineHeight: 18, font: FONT_REGULAR },
 };
 
 const CHART_SIZE = { width: 720, height: 460 };
@@ -253,13 +259,13 @@ function createBaseFrame(
   if (payload.title) {
     const title = createText(
       payload.title,
-      24,
-      FONT_BOLD,
+      TEXT_STYLES.title.fontSize,
+      TEXT_STYLES.title.font,
       COLORS.text,
       0,
       0,
       CONTENT_SIZE.width,
-      32,
+      TEXT_STYLES.title.lineHeight,
       "CENTER",
     );
     title.name = "Chart Title";
@@ -508,8 +514,12 @@ function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
     32,
     Math.min(112, outerRadius * (payload.innerRadius / 100)),
   );
+  const rightLegendWidth = 220;
+  const rightLegendGap = 52;
   const chartX =
-    payload.showLegend && payload.legendPos === "right" ? 104 : 228;
+    payload.showLegend && payload.legendPos === "right"
+      ? (width - diameter - rightLegendGap - rightLegendWidth) / 2
+      : (width - diameter) / 2;
   const chartY = payload.title ? 112 : 72;
   const centerX = outerRadius;
   const centerY = outerRadius;
@@ -521,8 +531,8 @@ function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
       diameter,
       diameter,
     ),
-    payload.showLegend && payload.legendPos === "right" ? "MIN" : "CENTER",
-    "CENTER",
+    "SCALE",
+    "SCALE",
   );
   doughnutFrame.constrainProportions = true;
   let angle = -Math.PI / 2;
@@ -566,7 +576,7 @@ function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
         createText(
           payload.showPercent ? "100%" : formatNumber(total, payload),
           22,
-          FONT_BOLD,
+          FONT_REGULAR,
           COLORS.text,
           centerX - 48,
           centerY - 18,
@@ -874,13 +884,13 @@ function drawAxisLabels(
     const xLabel = withConstraints(
       createText(
         payload.xLabel,
-        12,
-        FONT_MEDIUM,
+        TEXT_STYLES.axisTitle.fontSize,
+        TEXT_STYLES.axisTitle.font,
         COLORS.text,
         0,
         5,
         plotWidth,
-        18,
+        TEXT_STYLES.axisTitle.lineHeight,
         "CENTER",
       ),
       "STRETCH",
@@ -907,13 +917,13 @@ function drawAxisLabels(
     const yLabel = withConstraints(
       createText(
         payload.yLabel,
-        12,
-        FONT_MEDIUM,
+        TEXT_STYLES.axisTitle.fontSize,
+        TEXT_STYLES.axisTitle.font,
         COLORS.text,
-        (yLabelAreaWidth - plotHeight) / 2,
-        (plotHeight - 18) / 2,
+        20,
         plotHeight,
-        18,
+        plotHeight,
+        TEXT_STYLES.axisTitle.lineHeight,
         "CENTER",
       ),
       "CENTER",
@@ -921,6 +931,7 @@ function drawAxisLabels(
     );
     yLabel.name = "Y axis label";
     yLabel.rotation = -90;
+    setConstraints(yLabel, "MIN", "MAX");
     yLabelArea.appendChild(yLabel);
     frame.appendChild(yLabelArea);
   }
@@ -946,6 +957,18 @@ function drawLegend(
     "MAX",
   );
   const itemWidth = Math.min(118, plotWidth / payload.seriesNames.length);
+  const totalItemsWidth = itemWidth * payload.seriesNames.length;
+  const itemsFrame = withConstraints(
+    createTransparentFrame(
+      "Chart legend items",
+      (plotWidth - totalItemsWidth) / 2,
+      0,
+      totalItemsWidth,
+      24,
+    ),
+    "CENTER",
+    "CENTER",
+  );
 
   payload.seriesNames.forEach((name, index) => {
     const itemFrame = withConstraints(
@@ -956,7 +979,7 @@ function drawLegend(
         itemWidth,
         20,
       ),
-      "SCALE",
+      "MIN",
       "CENTER",
     );
     itemFrame.appendChild(
@@ -980,7 +1003,7 @@ function drawLegend(
           name,
           11,
           FONT_REGULAR,
-          COLORS.mutedText,
+          COLORS.text,
           16,
           2,
           Math.max(24, itemWidth - 20),
@@ -991,8 +1014,9 @@ function drawLegend(
         "CENTER",
       ),
     );
-    legendFrame.appendChild(itemFrame);
+    itemsFrame.appendChild(itemFrame);
   });
+  legendFrame.appendChild(itemsFrame);
   frame.appendChild(legendFrame);
 }
 
@@ -1120,7 +1144,7 @@ function drawDoughnutLabels(
             : row.label,
           11,
           FONT_MEDIUM,
-          colors[index % colors.length],
+          COLORS.text,
           x - 52,
           y - 10,
           104,
@@ -1240,6 +1264,7 @@ function createText(
   width: number,
   height: number,
   align: TextNode["textAlignHorizontal"],
+  lineHeight = height,
 ): TextNode {
   const text = figma.createText();
   text.name = characters;
@@ -1248,6 +1273,7 @@ function createText(
   if (text.resize) text.resize(width, height);
   text.fontName = fontName;
   text.fontSize = fontSize;
+  text.lineHeight = { unit: "PIXELS", value: lineHeight };
   text.characters = characters;
   text.fills = [solid(color)];
   text.textAlignHorizontal = align;
