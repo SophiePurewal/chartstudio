@@ -44,20 +44,20 @@ function patternMarks(pattern: DoughnutPatternType, size: number): string {
   for (let x = -size; x <= size * 2; x += step) {
     if (pattern === "hatch" || pattern === "cross-hatch") {
       lines.push(
-        `<line x1="${x}" y1="${size}" x2="${x + size}" y2="0" stroke="${dark}" stroke-width="1.75" />`,
+        `<line x1="${x}" y1="${size}" x2="${x + size}" y2="0" stroke="${dark}" stroke-width="1.75" stroke-linecap="butt" />`,
       );
     }
     if (pattern === "hatch-reverse" || pattern === "cross-hatch") {
       lines.push(
-        `<line x1="${x}" y1="0" x2="${x + size}" y2="${size}" stroke="${dark}" stroke-width="1.75" />`,
+        `<line x1="${x}" y1="0" x2="${x + size}" y2="${size}" stroke="${dark}" stroke-width="1.75" stroke-linecap="butt" />`,
       );
     }
     if (pattern === "grid") {
       lines.push(
-        `<line x1="${x}" y1="0" x2="${x}" y2="${size}" stroke="${dark}" stroke-width="1.4" />`,
+        `<line x1="${x}" y1="0" x2="${x}" y2="${size}" stroke="${dark}" stroke-width="1.4" stroke-linecap="butt" />`,
       );
       lines.push(
-        `<line x1="0" y1="${x + size}" x2="${size}" y2="${x + size}" stroke="${dark}" stroke-width="1.4" />`,
+        `<line x1="0" y1="${x + size}" x2="${size}" y2="${x + size}" stroke="${dark}" stroke-width="1.4" stroke-linecap="butt" />`,
       );
     }
   }
@@ -96,32 +96,46 @@ export function createPatternedDoughnutSvg(opts: {
   const total = segments.reduce((sum, s) => sum + Math.max(0, s.value), 0) || 1;
   let acc = 0;
 
-  const segmentSvg = segments
-    .map((segment, index) => {
-      const start = (acc / total) * Math.PI * 2 - Math.PI / 2;
-      acc += Math.max(0, segment.value);
-      const end = (acc / total) * Math.PI * 2 - Math.PI / 2;
-      const patternType = getPatternTypeForIndex(index);
-      const path = arcPath(
-        outerRadius,
-        outerRadius,
-        outerRadius,
-        innerRadius,
-        start,
-        end,
-      );
-      const clipId = `${defPrefix}-clip-${index}`;
-      return `
-        <clipPath id="${clipId}"><path d="${path}" /></clipPath>
-        <path d="${path}" fill="#E6E3DC" ${segmentBorders ? 'stroke="#FFFFFF" stroke-width="2"' : ""} />
-        <g clip-path="url(#${clipId})">${patternMarks(patternType, size)}</g>
-      `;
-    })
-    .join("\n");
+  const defs: string[] = [];
+  const segmentUses: string[] = [];
+
+  segments.forEach((segment, index) => {
+    const start = (acc / total) * Math.PI * 2 - Math.PI / 2;
+    acc += Math.max(0, segment.value);
+    const end = (acc / total) * Math.PI * 2 - Math.PI / 2;
+    const patternType = getPatternTypeForIndex(index);
+    const path = arcPath(
+      outerRadius,
+      outerRadius,
+      outerRadius,
+      innerRadius,
+      start,
+      end,
+    );
+    const clipId = `${defPrefix}-clip-${index}`;
+    const maskId = `${defPrefix}-mask-${index}`;
+    const segmentId = `${defPrefix}-slice-${index}`;
+
+    defs.push(`
+      <clipPath id="${clipId}" clipPathUnits="userSpaceOnUse"><path d="${path}" /></clipPath>
+      <mask id="${maskId}" maskUnits="userSpaceOnUse" x="0" y="0" width="${size}" height="${size}">
+        <rect x="0" y="0" width="${size}" height="${size}" fill="black" />
+        <path d="${path}" fill="white" />
+      </mask>
+      <g id="${segmentId}">
+        <g mask="url(#${maskId})" clip-path="url(#${clipId})">
+          <path d="${path}" fill="#E6E3DC" />
+          <g>${patternMarks(patternType, size)}</g>
+        </g>
+        ${segmentBorders ? `<path d="${path}" fill="none" stroke="#FFFFFF" stroke-width="2" />` : ""}
+      </g>
+    `);
+    segmentUses.push(`<use href="#${segmentId}" />`);
+  });
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-    <defs></defs>
-    ${segmentSvg}
+    <defs>${defs.join("\n")}</defs>
+    ${segmentUses.join("\n")}
     <circle cx="${outerRadius}" cy="${outerRadius}" r="${innerRadius}" fill="#FFFFFF" />
   </svg>`;
 }
