@@ -2,7 +2,11 @@ import {
   createPatternLegendSwatchSvg,
   createPatternedDoughnutSvg,
 } from "../lib/doughnut-pattern-svg";
-import { formatChartValue, formatPercent } from "../lib/number-format";
+import {
+  formatChartValue,
+  formatPercent,
+  getNumberFormatConfig,
+} from "../lib/number-format";
 import type {
   ChartOutputSize,
   ChartPayload,
@@ -549,6 +553,10 @@ function createEditableBarChart(payload: ChartPayload): FrameNode {
   return frame;
 }
 
+function getValueFormatterConfig(payload: ChartPayload) {
+  return getNumberFormatConfig(payload);
+}
+
 function createEditableLineChart(payload: ChartPayload): FrameNode {
   const layout = createChartLayout(payload);
   const { padding, plotWidth, plotHeight } = layout.cartesian;
@@ -659,7 +667,10 @@ function createEditableLineChart(payload: ChartPayload): FrameNode {
             contentFrame.appendChild(
               withConstraints(
                 createText(
-                  formatChartValue(point.value, payload),
+                  formatChartValue(
+                    point.value,
+                    getValueFormatterConfig(payload),
+                  ),
                   10,
                   FONT_MEDIUM,
                   COLORS.mutedText,
@@ -856,7 +867,7 @@ function drawGridAndAxes(
       frame.appendChild(
         withConstraints(
           createText(
-            formatChartValue(value, payload),
+            formatChartValue(value, getValueFormatterConfig(payload)),
             11,
             FONT_REGULAR,
             COLORS.mutedText,
@@ -979,7 +990,7 @@ function drawBars(
           frame.appendChild(
             withConstraints(
               createText(
-                formatChartValue(value, payload),
+                formatChartValue(value, getValueFormatterConfig(payload)),
                 10,
                 FONT_MEDIUM,
                 COLORS.mutedText,
@@ -1275,7 +1286,7 @@ function drawDoughnutLegend(
     }
     const valueLabel = payload.showPercent
       ? formatPercent((row.value / total) * 100)
-      : formatChartValue(row.value, payload);
+      : formatChartValue(row.value, getValueFormatterConfig(payload));
     itemFrame.appendChild(
       withConstraints(
         createText(
@@ -1404,7 +1415,7 @@ function drawDoughnutLabels(
         : Math.max(6, item.elbowX - labelWidth - 10);
     const valueText = payload.showPercent
       ? formatPercent(item.pct)
-      : formatChartValue(item.row.value, payload);
+      : formatChartValue(item.row.value, getValueFormatterConfig(payload));
 
     frame.appendChild(
       withConstraints(

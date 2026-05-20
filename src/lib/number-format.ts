@@ -7,6 +7,15 @@ export type NumberFormatConfig = {
   thousands: boolean;
 };
 
+export function getNumberFormatConfig(
+  config: NumberFormatConfig,
+): NumberFormatConfig {
+  return {
+    numberFormat: config.numberFormat,
+    thousands: config.thousands,
+  };
+}
+
 export function formatChartValue(
   value: number,
   config: NumberFormatConfig,
