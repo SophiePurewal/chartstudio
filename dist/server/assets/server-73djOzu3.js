@@ -15008,19 +15008,20 @@ function stripInlinedStylesheetAssets(manifest2, routes, matches) {
 }
 function attachRouterServerSsrUtils({ router, manifest: manifest2, getRequestAssets, includeUnmatchedRouteAssets = true }) {
   router.ssr = { get manifest() {
+    if (!manifest2) return manifest2;
     const requestAssets = getRequestAssets?.();
     const inlineCssAsset = getInlineCssAssetForMatches(manifest2, router.stores.matches.get());
     if (!requestAssets?.length && !inlineCssAsset) return manifest2;
     return {
       ...manifest2,
       routes: {
-        ...manifest2?.routes,
+        ...manifest2.routes,
         [rootRouteId]: {
-          ...manifest2?.routes?.[rootRouteId],
+          ...manifest2.routes[rootRouteId],
           assets: [
             ...requestAssets ?? [],
             ...inlineCssAsset ? [inlineCssAsset] : [],
-            ...manifest2?.routes?.["__root__"]?.assets ?? []
+            ...manifest2.routes["__root__"]?.assets ?? []
           ]
         }
       }
@@ -15967,7 +15968,7 @@ function getResponse() {
 }
 var HEADERS = { TSS_SHELL: "X-TSS_SHELL" };
 async function getStartManifest(matchedRoutes) {
-  const { tsrStartManifest } = await import("./_tanstack-start-manifest_v-Cmrv86Jv.js");
+  const { tsrStartManifest } = await import("./_tanstack-start-manifest_v-fyIkNO3H.js");
   const startManifest = tsrStartManifest();
   const rootRoute = startManifest.routes[rootRouteId] = startManifest.routes[rootRouteId] || {};
   rootRoute.assets = rootRoute.assets || [];
@@ -17053,8 +17054,8 @@ var getBaseManifest = getProdBaseManifest;
 var createEarlyHintsForRequest = createEarlyHintsCollector;
 async function loadEntries() {
   const [routerEntry, startEntry, pluginAdapters] = await Promise.all([
-    import("./router-CJ3CnqaR.js"),
-    import("./start-Ce2rdefp.js"),
+    import("./router-ClIAJvgd.js"),
+    import("./start-DxJ4lWYD.js"),
     import("./__23tanstack-start-plugin-adapters-Cwee5PKy.js")
   ]);
   return {

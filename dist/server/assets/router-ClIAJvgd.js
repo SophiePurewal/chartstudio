@@ -1,4 +1,4 @@
-import { N as reactExports, t as functionalUpdate$1, a as arraysEqual, g as createLRUCache, B as isPromise, C as isRedirect, A as isNotFound, x as invariant, f as createControlledPromise, X as rootRouteId, E as isServer$1, d as compileDecodeCharMap, Z as trimPath, W as rewriteBasepath, e as composeRewrites, M as processRouteTree, L as processRouteMasks, V as resolvePath, c as cleanPath, $ as trimPathRight, K as parseHref, o as executeRewriteInput, y as isDangerousProtocol, P as redirect, s as findSingleMatch, j as deepEqual, D as DEFAULT_PROTOCOL_ALLOWLIST, b as buildRouteBranch, w as interpolatePath, J as nullReplaceEqualDeep, S as replaceEqualDeep$1, H as last, i as decodePath, q as findFlatMatch, r as findRouteMatch, v as hasKeys, p as executeRewriteOutput, l as encodePathLikeUrl, _ as trimPathLeft, F as joinPaths, a1 as useRouter, k as dummyMatchContext, I as matchContext, T as requireReactDom, n as exactPathTest, Q as removeTrailingSlash, R as React, G as jsxRuntimeExports, a0 as useHydrated, m as escapeHtml, z as isInlinableStylesheet, u as getAssetCrossOrigin, U as resolveManifestAssetLink, O as Outlet } from "./server-BYZm084i.js";
+import { N as reactExports, t as functionalUpdate$1, a as arraysEqual, g as createLRUCache, B as isPromise, C as isRedirect, A as isNotFound, x as invariant, f as createControlledPromise, X as rootRouteId, E as isServer$1, d as compileDecodeCharMap, Z as trimPath, W as rewriteBasepath, e as composeRewrites, M as processRouteTree, L as processRouteMasks, V as resolvePath, c as cleanPath, $ as trimPathRight, K as parseHref, o as executeRewriteInput, y as isDangerousProtocol, P as redirect, s as findSingleMatch, j as deepEqual, D as DEFAULT_PROTOCOL_ALLOWLIST, b as buildRouteBranch, w as interpolatePath, J as nullReplaceEqualDeep, S as replaceEqualDeep$1, H as last, i as decodePath, q as findFlatMatch, r as findRouteMatch, v as hasKeys, p as executeRewriteOutput, l as encodePathLikeUrl, _ as trimPathLeft, F as joinPaths, a1 as useRouter, k as dummyMatchContext, I as matchContext, T as requireReactDom, n as exactPathTest, Q as removeTrailingSlash, R as React, G as jsxRuntimeExports, a0 as useHydrated, m as escapeHtml, z as isInlinableStylesheet, u as getAssetCrossOrigin, U as resolveManifestAssetLink, O as Outlet } from "./server-73djOzu3.js";
 import "node:async_hooks";
 import "node:stream/web";
 import "node:stream";
@@ -10145,9 +10145,16 @@ function ChartRender({
     const end = acc / total * Math.PI * 2 - Math.PI / 2;
     return {
       ...d,
+      start,
+      end,
       path: arcPath(r2, r2, r2, ir, start, end),
       pct: d.num / total * 100
     };
+  });
+  const callouts = arcs.map((arc) => {
+    const mid = (arc.start + arc.end) / 2;
+    const side = Math.cos(mid) >= 0 ? "right" : "left";
+    return { ...arc, mid, side };
   });
   const patternedSvg = config.palette === "pattern-fill" ? createPatternedDoughnutSvg({
     size,
@@ -10176,7 +10183,7 @@ function ChartRender({
           config.legendPos === "bottom" ? "flex-col items-center" : "items-center"
         ),
         children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: size, height: size }, className: "shrink-0", children: config.palette === "pattern-fill" && patternedSvg ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: size + 90, height: size }, className: "shrink-0", children: config.palette === "pattern-fill" && patternedSvg ? /* @__PURE__ */ jsxRuntimeExports.jsx(
             "img",
             {
               src: `data:image/svg+xml;utf8,${encodeURIComponent(patternedSvg)}`,
@@ -10184,16 +10191,87 @@ function ChartRender({
               height: size,
               alt: "Pattern filled doughnut preview"
             }
-          ) : /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { viewBox: `0 0 ${size} ${size}`, width: size, height: size, children: arcs.map((a, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "path",
+          ) : /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "svg",
             {
-              d: a.path,
-              fill: a.color,
-              stroke: config.segmentBorders ? "var(--color-surface)" : "none",
-              strokeWidth: config.segmentBorders ? 2 : 0
-            },
-            i
-          )) }) }),
+              viewBox: `${-50} 0 ${size + 100} ${size}`,
+              width: size + 90,
+              height: size,
+              children: [
+                arcs.map((a, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "path",
+                  {
+                    d: a.path,
+                    fill: a.color,
+                    stroke: config.segmentBorders ? "var(--color-surface)" : "none",
+                    strokeWidth: config.segmentBorders ? 2 : 0
+                  },
+                  i
+                )),
+                config.showValues && callouts.map((a, i) => {
+                  const anchorX = r2 + Math.cos(a.mid) * (ir + (r2 - ir) * 0.65);
+                  const anchorY = r2 + Math.sin(a.mid) * (ir + (r2 - ir) * 0.65);
+                  const elbowX = r2 + Math.cos(a.mid) * (r2 + 8);
+                  const elbowY = r2 + Math.sin(a.mid) * (r2 + 12);
+                  const labelX = a.side === "right" ? size + 4 : -4;
+                  const textAnchor = a.side === "right" ? "start" : "end";
+                  const lineColor = config.palette === "standard" ? a.color : "#6B6761";
+                  return /* @__PURE__ */ jsxRuntimeExports.jsxs("g", { children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "line",
+                      {
+                        x1: anchorX,
+                        y1: anchorY,
+                        x2: elbowX,
+                        y2: elbowY,
+                        stroke: lineColor,
+                        strokeWidth: 1
+                      }
+                    ),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "line",
+                      {
+                        x1: elbowX,
+                        y1: elbowY,
+                        x2: a.side === "right" ? labelX - 2 : labelX + 2,
+                        y2: elbowY,
+                        stroke: lineColor,
+                        strokeWidth: 1
+                      }
+                    ),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "text",
+                      {
+                        x: labelX,
+                        y: elbowY - 2,
+                        textAnchor,
+                        style: {
+                          fontSize: 8,
+                          fontWeight: 400,
+                          fill: "#281805"
+                        },
+                        children: a.label
+                      }
+                    ),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "text",
+                      {
+                        x: labelX,
+                        y: elbowY + 8,
+                        textAnchor,
+                        style: {
+                          fontSize: 8,
+                          fontWeight: 400,
+                          fill: "#281805"
+                        },
+                        children: config.showPercent ? `${a.pct.toFixed(0)}%` : fmt(a.num, config)
+                      }
+                    )
+                  ] }, `callout-${i}`);
+                })
+              ]
+            }
+          ) }),
           config.showLegend && /* @__PURE__ */ jsxRuntimeExports.jsx(
             "div",
             {
