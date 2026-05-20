@@ -33,6 +33,11 @@ type FrameNode = SceneNode & {
   fills: Paint[];
   clipsContent: boolean;
   appendChild: (node: SceneNode) => void;
+  layoutMode?: "NONE" | "HORIZONTAL" | "VERTICAL";
+  itemSpacing?: number;
+  primaryAxisSizingMode?: "FIXED" | "AUTO";
+  counterAxisSizingMode?: "FIXED" | "AUTO";
+  layoutAlign?: "INHERIT" | "STRETCH";
 };
 type RectangleNode = SceneNode & {
   fills: Paint[];
@@ -200,6 +205,8 @@ const DEFAULT_CHART_SIZE: ChartOutputSize = {
 const MIN_CUSTOM_WIDTH = 320;
 const MIN_CUSTOM_HEIGHT = 180;
 const CHART_FRAME_PADDING = 8;
+const DESKTOP_SECTION_SPACING = 48;
+const COMPACT_SECTION_SPACING = 16;
 const GRID = 8;
 const MOBILE_CUSTOM_WIDTH_MAX = 480;
 const AXLE_TITLE_STYLES = {
@@ -468,6 +475,33 @@ function createChartLayout(payload: ChartPayload): ChartLayout {
   };
 }
 
+function getChartSectionSpacing(size?: ChartOutputSize): number {
+  const resolved = resolveChartSize(size);
+  if (resolved.preset === "tablet-12" || resolved.preset === "mobile-4") {
+    return COMPACT_SECTION_SPACING;
+  }
+  if (resolved.preset === "custom") {
+    return resolved.width > 680
+      ? DESKTOP_SECTION_SPACING
+      : COMPACT_SECTION_SPACING;
+  }
+  return DESKTOP_SECTION_SPACING;
+}
+
+function createChartSectionFrame(
+  name: string,
+  width: number,
+  height: number,
+): FrameNode {
+  const section = figma.createFrame();
+  section.name = name;
+  if (section.resize) section.resize(width, Math.max(0, height));
+  section.fills = [];
+  section.clipsContent = false;
+  section.layoutAlign = "STRETCH";
+  return section;
+}
+
 async function createBaseFrame(
   payload: ChartPayload,
   fallbackName: string,
@@ -489,7 +523,11 @@ async function createBaseFrame(
     contentFrame.resize(layout.contentWidth, layout.contentHeight);
   }
   contentFrame.fills = [];
-  contentFrame.clipsContent = true;
+  contentFrame.clipsContent = false;
+  contentFrame.layoutMode = "VERTICAL";
+  contentFrame.itemSpacing = getChartSectionSpacing(payload.chartSize);
+  contentFrame.primaryAxisSizingMode = "FIXED";
+  contentFrame.counterAxisSizingMode = "FIXED";
   setConstraints(contentFrame, "MIN", "MIN");
   frame.appendChild(contentFrame);
 
@@ -506,12 +544,18 @@ async function createBaseFrame(
       "CENTER",
       TEXT_STYLES.title.lineHeight,
     );
-    title.name = "Chart Title";
+    title.name = "Chart Title text";
     await applyChartTitleTextStyle(title, payload.chartSize);
     title.characters = payload.title;
     title.textAlignVertical = "TOP";
     setConstraints(title, "MIN", "MIN");
-    contentFrame.appendChild(title);
+    const titleFrame = createChartSectionFrame(
+      "Chart Title",
+      layout.contentWidth,
+      TEXT_STYLES.title.lineHeight,
+    );
+    titleFrame.appendChild(title);
+    contentFrame.appendChild(titleFrame);
   }
 
   return { frame, contentFrame };
@@ -545,8 +589,20 @@ async function createEditableBarChart(
     ? `ChartStudio Bar Chart · ${payload.title}`
     : "ChartStudio Bar Chart";
 
+  const chartAreaFrame = createChartSectionFrame(
+    "Chart Area",
+    layout.contentWidth,
+    layout.contentHeight,
+  );
+  const labelsFrame = createChartSectionFrame(
+    "Labels",
+    layout.contentWidth,
+    payload.showAxisLabels || payload.xLabel || payload.yLabel ? 64 : 0,
+  );
+  contentFrame.appendChild(chartAreaFrame);
+
   drawGridAndAxes(
-    contentFrame,
+    chartAreaFrame,
     payload,
     padding,
     plotWidth,
@@ -554,7 +610,7 @@ async function createEditableBarChart(
     niceMax,
   );
   drawBars(
-    contentFrame,
+    chartAreaFrame,
     payload,
     rows,
     padding,
@@ -563,10 +619,19 @@ async function createEditableBarChart(
     niceMax,
     seriesCount,
   );
-  drawAxisLabels(contentFrame, payload, padding, plotWidth, plotHeight);
+  drawAxisLabels(labelsFrame, payload, padding, plotWidth, plotHeight);
+  if (payload.showAxisLabels || payload.xLabel || payload.yLabel) {
+    contentFrame.appendChild(labelsFrame);
+  }
 
   if (payload.showLegend && seriesCount > 1) {
-    drawLegend(contentFrame, payload, padding, plotWidth, height, layout);
+    const legendSection = createChartSectionFrame(
+      "Chart Legend",
+      layout.contentWidth,
+      layout.cartesian.legendHeight || 24,
+    );
+    drawLegend(legendSection, payload, padding, plotWidth, height, layout);
+    contentFrame.appendChild(legendSection);
   }
 
   return frame;
@@ -601,8 +666,20 @@ async function createEditableLineChart(
     : "ChartStudio Line Chart";
 
   try {
+    const chartAreaFrame = createChartSectionFrame(
+      "Chart Area",
+      layout.contentWidth,
+      layout.contentHeight,
+    );
+    const labelsFrame = createChartSectionFrame(
+      "Labels",
+      layout.contentWidth,
+      payload.showAxisLabels || payload.xLabel || payload.yLabel ? 64 : 0,
+    );
+    contentFrame.appendChild(chartAreaFrame);
+
     drawGridAndAxes(
-      contentFrame,
+      chartAreaFrame,
       payload,
       padding,
       plotWidth,
@@ -632,7 +709,7 @@ async function createEditableLineChart(
 
       if (lineStyle.double) {
         const offset = lineWeight / 2 + 0.5;
-        contentFrame.appendChild(
+        chartAreaFrame.appendChild(
           withConstraints(
             createVectorPath(
               `${seriesName} Line · upper`,
@@ -645,7 +722,7 @@ async function createEditableLineChart(
             "SCALE",
           ),
         );
-        contentFrame.appendChild(
+        chartAreaFrame.appendChild(
           withConstraints(
             createVectorPath(
               `${seriesName} Line · lower`,
@@ -659,7 +736,7 @@ async function createEditableLineChart(
           ),
         );
       } else {
-        contentFrame.appendChild(
+        chartAreaFrame.appendChild(
           withConstraints(
             createVectorPath(
               `${seriesName} Line`,
@@ -676,7 +753,7 @@ async function createEditableLineChart(
 
       if (payload.showPoints) {
         points.forEach((point) => {
-          contentFrame.appendChild(
+          chartAreaFrame.appendChild(
             createLinePointMarker(
               `${seriesName} data point · ${point.label}`,
               point.x,
@@ -685,7 +762,7 @@ async function createEditableLineChart(
             ),
           );
           if (payload.showValues) {
-            contentFrame.appendChild(
+            chartAreaFrame.appendChild(
               withConstraints(
                 createText(
                   formatChartValue(
@@ -711,17 +788,26 @@ async function createEditableLineChart(
     }
 
     drawXAxisCategoryLabels(
-      contentFrame,
+      labelsFrame,
       payload,
       rows,
       padding,
       plotWidth,
       plotHeight,
     );
-    drawAxisLabels(contentFrame, payload, padding, plotWidth, plotHeight);
+    drawAxisLabels(labelsFrame, payload, padding, plotWidth, plotHeight);
+    if (payload.showAxisLabels || payload.xLabel || payload.yLabel) {
+      contentFrame.appendChild(labelsFrame);
+    }
 
     if (payload.showLegend && seriesCount > 1) {
-      drawLegend(contentFrame, payload, padding, plotWidth, height, layout);
+      const legendSection = createChartSectionFrame(
+        "Chart Legend",
+        layout.contentWidth,
+        layout.cartesian.legendHeight || 24,
+      );
+      drawLegend(legendSection, payload, padding, plotWidth, height, layout);
+      contentFrame.appendChild(legendSection);
     }
 
     return frame;
@@ -759,6 +845,11 @@ async function createEditableDoughnutChart(
   );
   const centerX = outerRadius;
   const centerY = outerRadius;
+  const chartAreaSection = createChartSectionFrame(
+    "Chart Area",
+    layout.contentWidth,
+    layout.doughnut.squareSize,
+  );
   const doughnutFrame = withConstraints(
     createTransparentFrame(
       "Doughnut chart area",
@@ -832,11 +923,17 @@ async function createEditableDoughnutChart(
   centerHole.constrainProportions = true;
   doughnutFrame.appendChild(centerHole);
 
-  contentFrame.appendChild(doughnutFrame);
+  chartAreaSection.appendChild(doughnutFrame);
+  contentFrame.appendChild(chartAreaSection);
 
   if (payload.showValues) {
+    const labelsSection = createChartSectionFrame(
+      "Labels",
+      layout.contentWidth,
+      layout.contentHeight,
+    );
     drawDoughnutLabels(
-      contentFrame,
+      labelsSection,
       payload,
       values,
       total,
@@ -848,10 +945,17 @@ async function createEditableDoughnutChart(
       layout.contentWidth,
       layout.contentHeight,
     );
+    contentFrame.appendChild(labelsSection);
   }
 
   if (payload.showLegend) {
-    drawDoughnutLegend(contentFrame, payload, values, total, colors, layout);
+    const legendSection = createChartSectionFrame(
+      "Chart Legend",
+      layout.contentWidth,
+      layout.doughnut.legendHeight || 24,
+    );
+    drawDoughnutLegend(legendSection, payload, values, total, colors, layout);
+    contentFrame.appendChild(legendSection);
   }
 
   return frame;
@@ -1239,7 +1343,6 @@ function drawLegend(
     itemsFrame.appendChild(itemFrame);
   });
   legendFrame.appendChild(itemsFrame);
-  frame.appendChild(legendFrame);
 }
 
 function drawDoughnutLegend(
@@ -1346,7 +1449,6 @@ function drawDoughnutLegend(
     );
     legendFrame.appendChild(itemFrame);
   });
-  frame.appendChild(legendFrame);
 }
 
 function drawDoughnutLabels(
