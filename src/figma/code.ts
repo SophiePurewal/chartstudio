@@ -51,7 +51,10 @@ type TextNode = SceneNode & {
   fills: Paint[];
   textAlignHorizontal: "LEFT" | "CENTER" | "RIGHT" | "JUSTIFIED";
   textAlignVertical: "TOP" | "CENTER" | "BOTTOM";
+  textStyleId?: string;
+  setTextStyleIdAsync?: (styleId: string) => Promise<void>;
 };
+type TextStyle = { id: string; name: string };
 type LineNode = SceneNode & {
   strokes: Paint[];
   strokeWeight: number;
@@ -92,6 +95,7 @@ type FigmaPluginApi = {
   createVector: () => VectorNode;
   createNodeFromSvg: (svg: string) => SceneNode;
   loadFontAsync: (fontName: FontName) => Promise<void>;
+  getLocalTextStylesAsync?: () => Promise<TextStyle[]>;
   notify: (message: string, options?: { error?: boolean }) => void;
   closePlugin: () => void;
 };
@@ -193,6 +197,13 @@ const MIN_CUSTOM_WIDTH = 320;
 const MIN_CUSTOM_HEIGHT = 180;
 const CHART_FRAME_PADDING = 8;
 const GRID = 8;
+const MOBILE_CUSTOM_WIDTH_MAX = 480;
+const AXLE_TITLE_STYLES = {
+  desktopTablet: "AXLE 2.0 - Light/heading/lg",
+  mobile: "AXLE 2.0 - Light/heading/xs",
+};
+const AXLE_STYLE_FALLBACK_WARNING =
+  "AXLE title style not found. Using fallback title styling. Make sure _Core.AXLE 2.0 is enabled in this Figma file.";
 
 type ChartLayout = {
   outerWidth: number;
@@ -246,7 +257,7 @@ figma.ui.onmessage = async (message) => {
       figma.loadFontAsync(FONT_BOLD),
     ]);
 
-    chart = createEditableChart(message.payload);
+    chart = await createEditableChart(message.payload);
     figma.currentPage.appendChild(chart);
     figma.currentPage.selection = [chart];
     figma.viewport.scrollAndZoomIntoView([chart]);
@@ -307,7 +318,7 @@ function validatePayload(
   return { valid: true };
 }
 
-function createEditableChart(payload: ChartPayload): FrameNode {
+async function createEditableChart(payload: ChartPayload): Promise<FrameNode> {
   if (payload.type === "bar") return createEditableBarChart(payload);
   if (payload.type === "line") return createEditableLineChart(payload);
   if (payload.type === "doughnut") return createEditableDoughnutChart(payload);
@@ -453,11 +464,11 @@ function createChartLayout(payload: ChartPayload): ChartLayout {
   };
 }
 
-function createBaseFrame(
+async function createBaseFrame(
   payload: ChartPayload,
   fallbackName: string,
   layout: ChartLayout,
-): { frame: FrameNode; contentFrame: FrameNode } {
+): Promise<{ frame: FrameNode; contentFrame: FrameNode }> {
   const frame = figma.createFrame();
   frame.name = payload.title || fallbackName;
   if (frame.resize) frame.resize(layout.outerWidth, layout.outerHeight);
@@ -480,7 +491,7 @@ function createBaseFrame(
 
   if (payload.title) {
     const title = createText(
-      payload.title,
+      "",
       TEXT_STYLES.title.fontSize,
       TEXT_STYLES.title.font,
       COLORS.text,
@@ -492,6 +503,8 @@ function createBaseFrame(
       TEXT_STYLES.title.lineHeight,
     );
     title.name = "Chart Title";
+    await applyChartTitleTextStyle(title, payload.chartSize);
+    title.characters = payload.title;
     title.textAlignVertical = "TOP";
     setConstraints(title, "MIN", "MIN");
     contentFrame.appendChild(title);
@@ -500,7 +513,9 @@ function createBaseFrame(
   return { frame, contentFrame };
 }
 
-function createEditableBarChart(payload: ChartPayload): FrameNode {
+async function createEditableBarChart(
+  payload: ChartPayload,
+): Promise<FrameNode> {
   const layout = createChartLayout(payload);
   const { padding, plotWidth, plotHeight } = layout.cartesian;
   const height = layout.contentHeight;
@@ -517,7 +532,7 @@ function createEditableBarChart(payload: ChartPayload): FrameNode {
   );
   const niceMax = niceCeil(maxValue);
 
-  const { frame, contentFrame } = createBaseFrame(
+  const { frame, contentFrame } = await createBaseFrame(
     payload,
     "ChartStudio Bar Chart",
     layout,
@@ -557,7 +572,9 @@ function getValueFormatterConfig(payload: ChartPayload) {
   return getNumberFormatConfig(payload);
 }
 
-function createEditableLineChart(payload: ChartPayload): FrameNode {
+async function createEditableLineChart(
+  payload: ChartPayload,
+): Promise<FrameNode> {
   const layout = createChartLayout(payload);
   const { padding, plotWidth, plotHeight } = layout.cartesian;
   const height = layout.contentHeight;
@@ -570,7 +587,7 @@ function createEditableLineChart(payload: ChartPayload): FrameNode {
   }));
   const niceMax = niceCeil(getLargestValue(rows.map((row) => row.values)));
   const colors = PALETTES[payload.palette].map(hexToRgb);
-  const { frame, contentFrame } = createBaseFrame(
+  const { frame, contentFrame } = await createBaseFrame(
     payload,
     "ChartStudio Line Chart",
     layout,
@@ -710,9 +727,11 @@ function createEditableLineChart(payload: ChartPayload): FrameNode {
   }
 }
 
-function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
+async function createEditableDoughnutChart(
+  payload: ChartPayload,
+): Promise<FrameNode> {
   const layout = createChartLayout(payload);
-  const { frame, contentFrame } = createBaseFrame(
+  const { frame, contentFrame } = await createBaseFrame(
     payload,
     "ChartStudio Doughnut Chart",
     layout,
@@ -1606,6 +1625,46 @@ function createText(
   text.textAlignHorizontal = align;
   text.textAlignVertical = "CENTER";
   return text;
+}
+
+function getChartTitleStyleName(size?: ChartOutputSize): string {
+  const resolved = resolveChartSize(size);
+  if (
+    resolved.preset === "mobile-4" ||
+    (resolved.preset === "custom" && resolved.width <= MOBILE_CUSTOM_WIDTH_MAX)
+  ) {
+    return AXLE_TITLE_STYLES.mobile;
+  }
+  return AXLE_TITLE_STYLES.desktopTablet;
+}
+
+async function applyChartTitleTextStyle(
+  titleNode: TextNode,
+  size?: ChartOutputSize,
+): Promise<void> {
+  const targetStyleName = getChartTitleStyleName(size);
+  const styles = (await figma.getLocalTextStylesAsync?.()) ?? [];
+  const exact = styles.find((style) => style.name === targetStyleName);
+  const fallbackPatterns =
+    targetStyleName === AXLE_TITLE_STYLES.mobile
+      ? ["Light/heading/xs", "heading/xs"]
+      : ["Light/heading/lg", "heading/lg"];
+  const fallback = styles.find((style) =>
+    fallbackPatterns.some((pattern) => style.name.includes(pattern)),
+  );
+  const style = exact ?? fallback;
+
+  if (!style) {
+    globalThis.console?.warn(AXLE_STYLE_FALLBACK_WARNING);
+    return;
+  }
+
+  if (titleNode.setTextStyleIdAsync) {
+    await titleNode.setTextStyleIdAsync(style.id);
+    return;
+  }
+
+  titleNode.textStyleId = style.id;
 }
 
 function createLine(

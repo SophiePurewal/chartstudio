@@ -1,26 +1,21 @@
 import { EventEmitter } from "node:events";
-const hrtime$1 = /* @__PURE__ */ Object.assign(
-  function hrtime(startTime) {
-    const now = Date.now();
-    const seconds = Math.trunc(now / 1e3);
-    const nanos = (now % 1e3) * 1e6;
-    if (startTime) {
-      let diffSeconds = seconds - startTime[0];
-      let diffNanos = nanos - startTime[0];
-      if (diffNanos < 0) {
-        diffSeconds = diffSeconds - 1;
-        diffNanos = 1e9 + diffNanos;
-      }
-      return [diffSeconds, diffNanos];
+const hrtime$1 = /* @__PURE__ */ Object.assign(function hrtime(startTime) {
+  const now = Date.now();
+  const seconds = Math.trunc(now / 1e3);
+  const nanos = now % 1e3 * 1e6;
+  if (startTime) {
+    let diffSeconds = seconds - startTime[0];
+    let diffNanos = nanos - startTime[0];
+    if (diffNanos < 0) {
+      diffSeconds = diffSeconds - 1;
+      diffNanos = 1e9 + diffNanos;
     }
-    return [seconds, nanos];
-  },
-  {
-    bigint: function bigint() {
-      return BigInt(Date.now() * 1e6);
-    },
-  },
-);
+    return [diffSeconds, diffNanos];
+  }
+  return [seconds, nanos];
+}, { bigint: function bigint() {
+  return BigInt(Date.now() * 1e6);
+} });
 class ReadStream {
   fd;
   isRaw = false;
@@ -72,7 +67,8 @@ class WriteStream {
     }
     try {
       console.log(str);
-    } catch {}
+    } catch {
+    }
     cb && typeof cb === "function" && cb();
     return false;
   }
@@ -98,10 +94,7 @@ class Process extends EventEmitter {
     this.env = impl.env;
     this.hrtime = impl.hrtime;
     this.nextTick = impl.nextTick;
-    for (const prop of [
-      ...Object.getOwnPropertyNames(Process.prototype),
-      ...Object.getOwnPropertyNames(EventEmitter.prototype),
-    ]) {
+    for (const prop of [...Object.getOwnPropertyNames(Process.prototype), ...Object.getOwnPropertyNames(EventEmitter.prototype)]) {
       const value = this[prop];
       if (typeof value === "function") {
         this[prop] = value.bind(this);
@@ -110,9 +103,7 @@ class Process extends EventEmitter {
   }
   // --- event emitter ---
   emitWarning(warning, type, code) {
-    console.warn(
-      `${code ? `[${code}] ` : ""}${type ? `${type}: ` : ""}${warning}`,
-    );
+    console.warn(`${code ? `[${code}] ` : ""}${type ? `${type}: ` : ""}${warning}`);
   }
   emit(...args) {
     return super.emit(...args);
@@ -125,13 +116,13 @@ class Process extends EventEmitter {
   #stdout;
   #stderr;
   get stdin() {
-    return (this.#stdin ??= new ReadStream(0));
+    return this.#stdin ??= new ReadStream(0);
   }
   get stdout() {
-    return (this.#stdout ??= new WriteStream(1));
+    return this.#stdout ??= new WriteStream(1);
   }
   get stderr() {
-    return (this.#stderr ??= new WriteStream(2));
+    return this.#stderr ??= new WriteStream(2);
   }
   // --- cwd ---
   #cwd = "/";
@@ -200,8 +191,10 @@ class Process extends EventEmitter {
     return {};
   }
   // --- noop methods ---
-  ref() {}
-  unref() {}
+  ref() {
+  }
+  unref() {
+  }
   // --- unimplemented methods ---
   umask() {
     throw /* @__PURE__ */ createNotImplementedError("process.umask");
@@ -210,9 +203,7 @@ class Process extends EventEmitter {
     return void 0;
   }
   getActiveResourcesInfo() {
-    throw /* @__PURE__ */ createNotImplementedError(
-      "process.getActiveResourcesInfo",
-    );
+    throw /* @__PURE__ */ createNotImplementedError("process.getActiveResourcesInfo");
   }
   exit() {
     throw /* @__PURE__ */ createNotImplementedError("process.exit");
@@ -230,9 +221,7 @@ class Process extends EventEmitter {
     throw /* @__PURE__ */ createNotImplementedError("process.dlopen");
   }
   setSourceMapsEnabled() {
-    throw /* @__PURE__ */ createNotImplementedError(
-      "process.setSourceMapsEnabled",
-    );
+    throw /* @__PURE__ */ createNotImplementedError("process.setSourceMapsEnabled");
   }
   loadEnvFile() {
     throw /* @__PURE__ */ createNotImplementedError("process.loadEnvFile");
@@ -244,14 +233,10 @@ class Process extends EventEmitter {
     throw /* @__PURE__ */ createNotImplementedError("process.cpuUsage");
   }
   setUncaughtExceptionCaptureCallback() {
-    throw /* @__PURE__ */ createNotImplementedError(
-      "process.setUncaughtExceptionCaptureCallback",
-    );
+    throw /* @__PURE__ */ createNotImplementedError("process.setUncaughtExceptionCaptureCallback");
   }
   hasUncaughtExceptionCaptureCallback() {
-    throw /* @__PURE__ */ createNotImplementedError(
-      "process.hasUncaughtExceptionCaptureCallback",
-    );
+    throw /* @__PURE__ */ createNotImplementedError("process.hasUncaughtExceptionCaptureCallback");
   }
   initgroups() {
     throw /* @__PURE__ */ createNotImplementedError("process.initgroups");
@@ -266,9 +251,7 @@ class Process extends EventEmitter {
     throw /* @__PURE__ */ createNotImplementedError("process.binding");
   }
   // --- attached interfaces ---
-  permission = {
-    has: /* @__PURE__ */ notImplemented("process.permission.has"),
-  };
+  permission = { has: /* @__PURE__ */ notImplemented("process.permission.has") };
   report = {
     directory: "",
     filename: "",
@@ -278,27 +261,20 @@ class Process extends EventEmitter {
     reportOnSignal: false,
     reportOnUncaughtException: false,
     getReport: /* @__PURE__ */ notImplemented("process.report.getReport"),
-    writeReport: /* @__PURE__ */ notImplemented("process.report.writeReport"),
+    writeReport: /* @__PURE__ */ notImplemented("process.report.writeReport")
   };
   finalization = {
     register: /* @__PURE__ */ notImplemented("process.finalization.register"),
-    unregister: /* @__PURE__ */ notImplemented(
-      "process.finalization.unregister",
-    ),
-    registerBeforeExit: /* @__PURE__ */ notImplemented(
-      "process.finalization.registerBeforeExit",
-    ),
+    unregister: /* @__PURE__ */ notImplemented("process.finalization.unregister"),
+    registerBeforeExit: /* @__PURE__ */ notImplemented("process.finalization.registerBeforeExit")
   };
-  memoryUsage = Object.assign(
-    () => ({
-      arrayBuffers: 0,
-      rss: 0,
-      external: 0,
-      heapTotal: 0,
-      heapUsed: 0,
-    }),
-    { rss: () => 0 },
-  );
+  memoryUsage = Object.assign(() => ({
+    arrayBuffers: 0,
+    rss: 0,
+    external: 0,
+    heapTotal: 0,
+    heapUsed: 0
+  }), { rss: () => 0 });
   // --- undefined props ---
   mainModule = void 0;
   domain = void 0;
@@ -346,7 +322,7 @@ const unenvProcess = new Process({
   env: globalProcess.env,
   hrtime: hrtime$1,
   // `nextTick` is available from workerd process v1
-  nextTick: workerdProcess.nextTick,
+  nextTick: workerdProcess.nextTick
 });
 const { exit, features, platform } = workerdProcess;
 const {
@@ -454,7 +430,7 @@ const {
   unref,
   uptime,
   version,
-  versions,
+  versions
 } = unenvProcess;
 const _process = {
   abort,
@@ -564,13 +540,11 @@ const _process = {
   _pendingMessage,
   _channel,
   _send,
-  _linkedBinding,
+  _linkedBinding
 };
 globalThis.process = _process;
 const _timeOrigin = globalThis.performance?.timeOrigin ?? Date.now();
-const _performanceNow = globalThis.performance?.now
-  ? globalThis.performance.now.bind(globalThis.performance)
-  : () => Date.now() - _timeOrigin;
+const _performanceNow = globalThis.performance?.now ? globalThis.performance.now.bind(globalThis.performance) : () => Date.now() - _timeOrigin;
 const nodeTiming = {
   name: "node",
   entryType: "node",
@@ -586,12 +560,12 @@ const nodeTiming = {
   uvMetricsInfo: {
     loopCount: 0,
     events: 0,
-    eventsWaiting: 0,
+    eventsWaiting: 0
   },
   detail: void 0,
   toJSON() {
     return this;
-  },
+  }
 };
 class PerformanceEntry {
   __unenv__ = true;
@@ -613,7 +587,7 @@ class PerformanceEntry {
       entryType: this.entryType,
       startTime: this.startTime,
       duration: this.duration,
-      detail: this.detail,
+      detail: this.detail
     };
   }
 }
@@ -693,27 +667,19 @@ class Performance {
     return Date.now() - this.timeOrigin;
   }
   clearMarks(markName) {
-    this._entries = markName
-      ? this._entries.filter((e) => e.name !== markName)
-      : this._entries.filter((e) => e.entryType !== "mark");
+    this._entries = markName ? this._entries.filter((e) => e.name !== markName) : this._entries.filter((e) => e.entryType !== "mark");
   }
   clearMeasures(measureName) {
-    this._entries = measureName
-      ? this._entries.filter((e) => e.name !== measureName)
-      : this._entries.filter((e) => e.entryType !== "measure");
+    this._entries = measureName ? this._entries.filter((e) => e.name !== measureName) : this._entries.filter((e) => e.entryType !== "measure");
   }
   clearResourceTimings() {
-    this._entries = this._entries.filter(
-      (e) => e.entryType !== "resource" || e.entryType !== "navigation",
-    );
+    this._entries = this._entries.filter((e) => e.entryType !== "resource" || e.entryType !== "navigation");
   }
   getEntries() {
     return this._entries;
   }
   getEntriesByName(name, type) {
-    return this._entries.filter(
-      (e) => e.name === name && (!type || e.entryType === type),
-    );
+    return this._entries.filter((e) => e.name === name && (!type || e.entryType === type));
   }
   getEntriesByType(type) {
     return this._entries.filter((e) => e.entryType === type);
@@ -727,8 +693,7 @@ class Performance {
     let start;
     let end;
     if (typeof startOrMeasureOptions === "string") {
-      start = this.getEntriesByName(startOrMeasureOptions, "mark")[0]
-        ?.startTime;
+      start = this.getEntriesByName(startOrMeasureOptions, "mark")[0]?.startTime;
       end = this.getEntriesByName(endMark, "mark")[0]?.startTime;
     } else {
       start = Number.parseFloat(startOrMeasureOptions?.start) || this.now();
@@ -738,8 +703,8 @@ class Performance {
       startTime: start,
       detail: {
         start,
-        end,
-      },
+        end
+      }
     });
     this._entries.push(entry);
     return entry;
@@ -748,19 +713,13 @@ class Performance {
     this._resourceTimingBufferSize = maxSize;
   }
   addEventListener(type, listener, options) {
-    throw /* @__PURE__ */ createNotImplementedError(
-      "Performance.addEventListener",
-    );
+    throw /* @__PURE__ */ createNotImplementedError("Performance.addEventListener");
   }
   removeEventListener(type, listener, options) {
-    throw /* @__PURE__ */ createNotImplementedError(
-      "Performance.removeEventListener",
-    );
+    throw /* @__PURE__ */ createNotImplementedError("Performance.removeEventListener");
   }
   dispatchEvent(event) {
-    throw /* @__PURE__ */ createNotImplementedError(
-      "Performance.dispatchEvent",
-    );
+    throw /* @__PURE__ */ createNotImplementedError("Performance.dispatchEvent");
   }
   toJSON() {
     return this;
@@ -777,14 +736,10 @@ class PerformanceObserver {
     return [];
   }
   disconnect() {
-    throw /* @__PURE__ */ createNotImplementedError(
-      "PerformanceObserver.disconnect",
-    );
+    throw /* @__PURE__ */ createNotImplementedError("PerformanceObserver.disconnect");
   }
   observe(options) {
-    throw /* @__PURE__ */ createNotImplementedError(
-      "PerformanceObserver.observe",
-    );
+    throw /* @__PURE__ */ createNotImplementedError("PerformanceObserver.observe");
   }
   bind(fn) {
     return fn;
@@ -802,10 +757,7 @@ class PerformanceObserver {
     return this;
   }
 }
-const performance =
-  globalThis.performance && "addEventListener" in globalThis.performance
-    ? globalThis.performance
-    : new Performance();
+const performance = globalThis.performance && "addEventListener" in globalThis.performance ? globalThis.performance : new Performance();
 if (!("__unenv__" in performance)) {
   const proto = Performance.prototype;
   for (const key of Object.getOwnPropertyNames(proto)) {
@@ -831,9 +783,13 @@ function record(error) {
   lastCapturedError = { error, at: Date.now() };
 }
 if (typeof globalThis.addEventListener === "function") {
-  globalThis.addEventListener("error", (event) => record(event.error ?? event));
-  globalThis.addEventListener("unhandledrejection", (event) =>
-    record(event.reason),
+  globalThis.addEventListener(
+    "error",
+    (event) => record(event.error ?? event)
+  );
+  globalThis.addEventListener(
+    "unhandledrejection",
+    (event) => record(event.reason)
   );
 }
 function consumeLastCapturedError() {
@@ -879,16 +835,16 @@ function renderErrorPage() {
 let serverEntryPromise;
 async function getServerEntry() {
   if (!serverEntryPromise) {
-    serverEntryPromise = import("./server-D0QWcPH9.js")
-      .then((n) => n.Y)
-      .then((m) => m.default ?? m);
+    serverEntryPromise = import("./server-D0QWcPH9.js").then((n) => n.Y).then(
+      (m) => m.default ?? m
+    );
   }
   return serverEntryPromise;
 }
 function brandedErrorResponse() {
   return new Response(renderErrorPage(), {
     status: 500,
-    headers: { "content-type": "text/html; charset=utf-8" },
+    headers: { "content-type": "text/html; charset=utf-8" }
   });
 }
 function isCatastrophicSsrErrorBody(body, responseStatus) {
@@ -902,19 +858,11 @@ function isCatastrophicSsrErrorBody(body, responseStatus) {
     return false;
   }
   const fields = payload;
-  const expectedKeys = /* @__PURE__ */ new Set([
-    "message",
-    "status",
-    "unhandled",
-  ]);
+  const expectedKeys = /* @__PURE__ */ new Set(["message", "status", "unhandled"]);
   if (!Object.keys(fields).every((key) => expectedKeys.has(key))) {
     return false;
   }
-  return (
-    fields.unhandled === true &&
-    fields.message === "HTTPError" &&
-    (fields.status === void 0 || fields.status === responseStatus)
-  );
+  return fields.unhandled === true && fields.message === "HTTPError" && (fields.status === void 0 || fields.status === responseStatus);
 }
 async function normalizeCatastrophicSsrResponse(response) {
   if (response.status < 500) return response;
@@ -925,7 +873,7 @@ async function normalizeCatastrophicSsrResponse(response) {
     return response;
   }
   console.error(
-    consumeLastCapturedError() ?? new Error(`h3 swallowed SSR error: ${body}`),
+    consumeLastCapturedError() ?? new Error(`h3 swallowed SSR error: ${body}`)
   );
   return brandedErrorResponse();
 }
@@ -939,7 +887,10 @@ const server = {
       console.error(error);
       return brandedErrorResponse();
     }
-  },
+  }
 };
 const workerEntry = server ?? {};
-export { renderErrorPage as r, workerEntry as w };
+export {
+  renderErrorPage as r,
+  workerEntry as w
+};
