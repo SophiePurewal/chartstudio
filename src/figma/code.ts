@@ -401,6 +401,7 @@ function createChartLayout(payload: ChartPayload): ChartLayout {
     cartesianPadding.top + plotHeight + cartesianPadding.bottom;
 
   const doughnutTop = compact ? 8 : 12;
+  const doughnutLabelInset = payload.showValues ? (compact ? 20 : 26) : 0;
   const rightLegendAllowed = payload.legendPos === "right" && size.width >= 560;
   const legendRows = Math.ceil(
     payload.rows.length / (rightLegendAllowed ? 1 : 2),
@@ -417,24 +418,32 @@ function createChartLayout(payload: ChartPayload): ChartLayout {
     contentHeight -
       doughnutTop -
       GRID -
-      (rightLegendAllowed ? 0 : doughnutLegendHeight + doughnutGap),
+      (rightLegendAllowed ? 0 : doughnutLegendHeight + doughnutGap) -
+      doughnutLabelInset * 2,
   );
   const availableDoughnutWidth = Math.max(
     GRID * 10,
-    contentWidth - (rightLegendAllowed ? doughnutLegendWidth + doughnutGap : 0),
+    contentWidth -
+      (rightLegendAllowed ? doughnutLegendWidth + doughnutGap : 0) -
+      doughnutLabelInset * 2,
   );
   const squareSize = Math.max(
     GRID * 10,
     Math.min(availableDoughnutWidth, availableDoughnutHeight),
   );
   const combinedWidth = rightLegendAllowed
-    ? squareSize + doughnutGap + doughnutLegendWidth
-    : squareSize;
-  const chartX = Math.max(GRID, (contentWidth - combinedWidth) / 2);
-  const chartY = doughnutTop;
+    ? squareSize + doughnutLabelInset * 2 + doughnutGap + doughnutLegendWidth
+    : squareSize + doughnutLabelInset * 2;
+  const chartX = Math.max(
+    GRID,
+    (contentWidth - combinedWidth) / 2 + doughnutLabelInset,
+  );
+  const chartY = doughnutTop + doughnutLabelInset;
   const doughnutAreaHeight = rightLegendAllowed
-    ? squareSize
-    : squareSize + (hasLegend ? doughnutGap + doughnutLegendHeight : 0);
+    ? squareSize + doughnutLabelInset * 2
+    : squareSize +
+      doughnutLabelInset * 2 +
+      (hasLegend ? doughnutGap + doughnutLegendHeight : 0);
 
   const hasTitle = Boolean(payload.title);
   const hasCartesianLabels =
@@ -543,7 +552,7 @@ async function createBaseFrame(
   if (frame.resize) frame.resize(layout.outerWidth, layout.outerHeight);
   frame.x = figma.viewport.center.x - layout.outerWidth / 2;
   frame.y = figma.viewport.center.y - layout.outerHeight / 2;
-  frame.fills = [solid(COLORS.background)];
+  frame.fills = [];
   frame.clipsContent = false;
 
   const contentFrame = figma.createFrame();
@@ -1057,7 +1066,7 @@ function drawGridAndAxes(
         padding.left + plotWidth,
         padding.top + plotHeight,
         COLORS.axis,
-        1.5,
+        1,
       ),
       "SCALE",
       "SCALE",
@@ -1072,7 +1081,7 @@ function drawGridAndAxes(
         padding.left,
         padding.top + plotHeight,
         COLORS.axis,
-        1.5,
+        1,
       ),
       "SCALE",
       "SCALE",
@@ -1204,7 +1213,12 @@ function drawXAxisCategoryLabels(
 ) {
   if (!payload.showAxisLabels) return;
   const denominator = Math.max(rows.length - 1, 1);
+  const labelWidth = 72;
   rows.forEach((row, rowIndex) => {
+    const centerX = padding.left + (plotWidth * rowIndex) / denominator;
+    const minX = padding.left - labelWidth / 2;
+    const maxX = padding.left + plotWidth - labelWidth / 2;
+    const x = Math.max(minX, Math.min(maxX, centerX - labelWidth / 2));
     frame.appendChild(
       withConstraints(
         createText(
@@ -1212,9 +1226,9 @@ function drawXAxisCategoryLabels(
           11,
           FONT_REGULAR,
           COLORS.mutedText,
-          padding.left + (plotWidth * rowIndex) / denominator - 36,
+          x,
           padding.top + plotHeight + 10,
-          72,
+          labelWidth,
           18,
           "CENTER",
         ),
@@ -1284,7 +1298,7 @@ function drawAxisLabels(
         TEXT_STYLES.axisTitle.font,
         COLORS.text,
         (yLabelAreaWidth - TEXT_STYLES.axisTitle.lineHeight) / 2,
-        plotHeight,
+        (plotHeight - TEXT_STYLES.axisTitle.lineHeight) / 2,
         plotHeight,
         TEXT_STYLES.axisTitle.lineHeight,
         "CENTER",
@@ -1486,6 +1500,7 @@ function drawDoughnutLegend(
     );
     legendFrame.appendChild(itemFrame);
   });
+  frame.appendChild(legendFrame);
 }
 
 function drawDoughnutLabels(
@@ -1734,10 +1749,11 @@ function createLinePointMarker(
     "SCALE",
   );
   const dot = withConstraints(
-    createEllipse(`${name} circle`, 0, 0, 8, 8, color, COLORS.background, 1.5),
+    createEllipse(`${name} circle`, 0, 0, 8, 8, color, color, 1.5),
     "CENTER",
     "CENTER",
   );
+  dot.fills = [];
   dot.constrainProportions = true;
   marker.appendChild(dot);
   return marker;
