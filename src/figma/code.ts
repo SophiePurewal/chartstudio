@@ -219,6 +219,7 @@ type ChartLayout = {
   outerHeight: number;
   contentWidth: number;
   contentHeight: number;
+  contentFrameHeight: number;
   cartesian: {
     padding: { top: number; left: number; bottom: number; right: number };
     plotWidth: number;
@@ -444,11 +445,51 @@ function createChartLayout(payload: ChartPayload): ChartLayout {
         chartY + squareSize + doughnutGap,
       );
 
+  const hasTitle = Boolean(payload.title);
+  const hasCartesianLabels =
+    payload.type !== "doughnut" &&
+    (payload.showAxisLabels ||
+      Boolean(payload.xLabel) ||
+      Boolean(payload.yLabel));
+  const hasDoughnutLabels = payload.type === "doughnut" && payload.showValues;
+  const hasLegendSection =
+    payload.type === "doughnut"
+      ? payload.showLegend
+      : payload.showLegend && Math.max(1, payload.seriesNames.length) > 1;
+  const chartAreaHeight =
+    payload.type === "doughnut" ? squareSize : contentHeight;
+  const labelsHeight = hasDoughnutLabels
+    ? contentHeight
+    : hasCartesianLabels
+      ? 64
+      : 0;
+  const legendSectionHeight = hasLegendSection
+    ? payload.type === "doughnut"
+      ? doughnutLegendHeight || 24
+      : legendHeight || 24
+    : 0;
+  const sectionCount =
+    Number(hasTitle) +
+    1 +
+    Number(labelsHeight > 0) +
+    Number(legendSectionHeight > 0);
+  const contentFrameHeight =
+    (hasTitle ? TEXT_STYLES.title.lineHeight : 0) +
+    chartAreaHeight +
+    labelsHeight +
+    legendSectionHeight +
+    Math.max(0, sectionCount - 1) * sectionSpacing;
+  const outerHeight = Math.max(
+    CHART_FRAME_PADDING * 2 + 1,
+    contentFrameHeight + CHART_FRAME_PADDING * 2,
+  );
+
   return {
     outerWidth: size.width,
-    outerHeight: 0,
+    outerHeight,
     contentWidth,
     contentHeight,
+    contentFrameHeight,
     cartesian: {
       padding: cartesianPadding,
       plotWidth,
@@ -482,16 +523,14 @@ function getChartSectionSpacing(size?: ChartOutputSize): number {
   return DESKTOP_SECTION_SPACING;
 }
 
-function finalizeChartFrame(
-  frame: FrameNode,
-  contentFrame: FrameNode,
-  width: number,
-): void {
+function finalizeChartFrame(frame: FrameNode, layout: ChartLayout): void {
   const finalHeight = Math.ceil(
-    Number((contentFrame as FrameNode & { height?: number }).height ?? 0) +
-      CHART_FRAME_PADDING * 2,
+    Math.max(
+      CHART_FRAME_PADDING * 2 + 1,
+      layout.contentFrameHeight + CHART_FRAME_PADDING * 2,
+    ),
   );
-  if (frame.resize) frame.resize(width, finalHeight);
+  if (frame.resize) frame.resize(layout.outerWidth, finalHeight);
 }
 
 function createChartSectionFrame(
@@ -526,7 +565,7 @@ async function createBaseFrame(
   contentFrame.x = CHART_FRAME_PADDING;
   contentFrame.y = CHART_FRAME_PADDING;
   if (contentFrame.resize) {
-    contentFrame.resize(layout.contentWidth, 0);
+    contentFrame.resize(layout.contentWidth, layout.contentFrameHeight);
   }
   contentFrame.fills = [];
   contentFrame.clipsContent = false;
@@ -640,7 +679,7 @@ async function createEditableBarChart(
     contentFrame.appendChild(legendSection);
   }
 
-  finalizeChartFrame(frame, contentFrame, layout.outerWidth);
+  finalizeChartFrame(frame, layout);
   return frame;
 }
 
@@ -817,7 +856,7 @@ async function createEditableLineChart(
       contentFrame.appendChild(legendSection);
     }
 
-    finalizeChartFrame(frame, contentFrame, layout.outerWidth);
+    finalizeChartFrame(frame, layout);
     return frame;
   } catch (error) {
     if (frame.remove) frame.remove();
@@ -966,6 +1005,7 @@ async function createEditableDoughnutChart(
     contentFrame.appendChild(legendSection);
   }
 
+  finalizeChartFrame(frame, layout);
   return frame;
 }
 
