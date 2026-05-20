@@ -189,21 +189,19 @@ const TEXT_STYLES = {
 
 const CHART_SIZE_PRESETS: Record<
   Exclude<ChartOutputSize["preset"], "custom">,
-  { label: string; width: number; height: number }
+  { label: string; width: number }
 > = {
-  "desktop-12": { label: "Desktop 12 column", width: 1064, height: 608 },
-  "desktop-10": { label: "Desktop 10 column", width: 872, height: 496 },
-  "desktop-8": { label: "Desktop 8 column", width: 680, height: 392 },
-  "tablet-12": { label: "Tablet 12 column", width: 632, height: 360 },
-  "mobile-4": { label: "Mobile 4 column", width: 351, height: 200 },
+  "desktop-12": { label: "Desktop 12 column", width: 1064 },
+  "desktop-10": { label: "Desktop 10 column", width: 872 },
+  "desktop-8": { label: "Desktop 8 column", width: 680 },
+  "tablet-12": { label: "Tablet 12 column", width: 632 },
+  "mobile-4": { label: "Mobile 4 column", width: 351 },
 };
 const DEFAULT_CHART_SIZE: ChartOutputSize = {
   preset: "desktop-8",
   width: CHART_SIZE_PRESETS["desktop-8"].width,
-  height: CHART_SIZE_PRESETS["desktop-8"].height,
 };
 const MIN_CUSTOM_WIDTH = 320;
-const MIN_CUSTOM_HEIGHT = 180;
 const CHART_FRAME_PADDING = 8;
 const DESKTOP_SECTION_SPACING = 48;
 const COMPACT_SECTION_SPACING = 16;
@@ -341,12 +339,11 @@ function resolveChartSize(size?: ChartOutputSize): ChartOutputSize {
   if (size.preset !== "custom") {
     const preset =
       CHART_SIZE_PRESETS[size.preset] ?? CHART_SIZE_PRESETS["desktop-8"];
-    return { preset: size.preset, width: preset.width, height: preset.height };
+    return { preset: size.preset, width: preset.width };
   }
   return {
     preset: "custom",
     width: Math.round(Number(size.width)),
-    height: Math.round(Number(size.height)),
   };
 }
 
@@ -354,19 +351,13 @@ function validateChartSize(
   size?: ChartOutputSize,
 ): { valid: true } | { valid: false; message: string } {
   const resolved = resolveChartSize(size);
-  if (!Number.isFinite(resolved.width) || !Number.isFinite(resolved.height)) {
-    return { valid: false, message: "Enter a valid chart width and height." };
+  if (!Number.isFinite(resolved.width)) {
+    return { valid: false, message: "Enter a valid chart width." };
   }
   if (resolved.width < MIN_CUSTOM_WIDTH) {
     return {
       valid: false,
       message: `Chart width must be at least ${MIN_CUSTOM_WIDTH}px.`,
-    };
-  }
-  if (resolved.height < MIN_CUSTOM_HEIGHT) {
-    return {
-      valid: false,
-      message: `Chart height must be at least ${MIN_CUSTOM_HEIGHT}px.`,
     };
   }
   return { valid: true };
@@ -375,8 +366,12 @@ function validateChartSize(
 function createChartLayout(payload: ChartPayload): ChartLayout {
   const size = resolveChartSize(payload.chartSize);
   const contentWidth = size.width - CHART_FRAME_PADDING * 2;
-  const contentHeight = size.height - CHART_FRAME_PADDING * 2;
-  const compact = size.width <= 420 || size.height <= 240;
+  const compact = size.width <= 420;
+  const sectionSpacing = getChartSectionSpacing(payload.chartSize);
+  const contentHeight = Math.max(
+    280,
+    Math.round(size.width * (compact ? 0.9 : 0.55)),
+  );
   const hasLegend = payload.showLegend;
   const cartesianPadding = {
     top: payload.title ? (compact ? 56 : 72) : compact ? 24 : 36,
@@ -408,8 +403,7 @@ function createChartLayout(payload: ChartPayload): ChartLayout {
   );
 
   const doughnutTop = payload.title ? (compact ? 56 : 72) : compact ? 16 : 32;
-  const rightLegendAllowed =
-    payload.legendPos === "right" && size.width >= 560 && size.height >= 300;
+  const rightLegendAllowed = payload.legendPos === "right" && size.width >= 560;
   const legendRows = Math.ceil(
     payload.rows.length / (rightLegendAllowed ? 1 : 2),
   );
@@ -452,7 +446,7 @@ function createChartLayout(payload: ChartPayload): ChartLayout {
 
   return {
     outerWidth: size.width,
-    outerHeight: size.height,
+    outerHeight: 0,
     contentWidth,
     contentHeight,
     cartesian: {
@@ -488,6 +482,18 @@ function getChartSectionSpacing(size?: ChartOutputSize): number {
   return DESKTOP_SECTION_SPACING;
 }
 
+function finalizeChartFrame(
+  frame: FrameNode,
+  contentFrame: FrameNode,
+  width: number,
+): void {
+  const finalHeight = Math.ceil(
+    Number((contentFrame as FrameNode & { height?: number }).height ?? 0) +
+      CHART_FRAME_PADDING * 2,
+  );
+  if (frame.resize) frame.resize(width, finalHeight);
+}
+
 function createChartSectionFrame(
   name: string,
   width: number,
@@ -513,20 +519,20 @@ async function createBaseFrame(
   frame.x = figma.viewport.center.x - layout.outerWidth / 2;
   frame.y = figma.viewport.center.y - layout.outerHeight / 2;
   frame.fills = [solid(COLORS.background)];
-  frame.clipsContent = true;
+  frame.clipsContent = false;
 
   const contentFrame = figma.createFrame();
   contentFrame.name = "Chart content";
   contentFrame.x = CHART_FRAME_PADDING;
   contentFrame.y = CHART_FRAME_PADDING;
   if (contentFrame.resize) {
-    contentFrame.resize(layout.contentWidth, layout.contentHeight);
+    contentFrame.resize(layout.contentWidth, 0);
   }
   contentFrame.fills = [];
   contentFrame.clipsContent = false;
   contentFrame.layoutMode = "VERTICAL";
   contentFrame.itemSpacing = getChartSectionSpacing(payload.chartSize);
-  contentFrame.primaryAxisSizingMode = "FIXED";
+  contentFrame.primaryAxisSizingMode = "AUTO";
   contentFrame.counterAxisSizingMode = "FIXED";
   setConstraints(contentFrame, "MIN", "MIN");
   frame.appendChild(contentFrame);
@@ -634,6 +640,7 @@ async function createEditableBarChart(
     contentFrame.appendChild(legendSection);
   }
 
+  finalizeChartFrame(frame, contentFrame, layout.outerWidth);
   return frame;
 }
 
@@ -810,6 +817,7 @@ async function createEditableLineChart(
       contentFrame.appendChild(legendSection);
     }
 
+    finalizeChartFrame(frame, contentFrame, layout.outerWidth);
     return frame;
   } catch (error) {
     if (frame.remove) frame.remove();

@@ -35,7 +35,7 @@ import type {
 
 type ChartType = "line" | "bar" | "doughnut";
 type DataMode = "paste" | "manual";
-type CustomSizeField = "width" | "height";
+type CustomSizeField = "width";
 
 // A row = one category with N parallel values (one per series)
 type Row = { label: string; values: string[] };
@@ -74,29 +74,24 @@ type Config = {
   segmentBorders: boolean;
   chartSizePreset: ChartSizePreset;
   customWidth: string;
-  customHeight: string;
-  lockAspectRatio: boolean;
 };
 
 const CHART_SIZE_OPTIONS: {
   id: ChartSizePreset;
   label: string;
   width: number;
-  height: number;
 }[] = [
-  { id: "desktop-12", label: "Desktop 12 column", width: 1064, height: 608 },
-  { id: "desktop-10", label: "Desktop 10 column", width: 872, height: 496 },
-  { id: "desktop-8", label: "Desktop 8 column", width: 680, height: 392 },
-  { id: "tablet-12", label: "Tablet 12 column", width: 632, height: 360 },
-  { id: "mobile-4", label: "Mobile 4 column", width: 351, height: 200 },
-  { id: "custom", label: "Custom size", width: 680, height: 392 },
+  { id: "desktop-12", label: "Desktop 12 column", width: 1064 },
+  { id: "desktop-10", label: "Desktop 10 column", width: 872 },
+  { id: "desktop-8", label: "Desktop 8 column", width: 680 },
+  { id: "tablet-12", label: "Tablet 12 column", width: 632 },
+  { id: "mobile-4", label: "Mobile 4 column", width: 351 },
+  { id: "custom", label: "Custom size", width: 680 },
 ];
 const DEFAULT_CHART_SIZE = CHART_SIZE_OPTIONS.find(
   (size) => size.id === "desktop-8",
 )!;
 const MIN_CUSTOM_WIDTH = 320;
-const MIN_CUSTOM_HEIGHT = 180;
-const LOCKED_ASPECT_RATIO = 1.75;
 
 const SAMPLE: Record<ChartType, string> = {
   line: "Month, Revenue, Costs\nJan, 12400, 8200\nFeb, 13800, 8900\nMar, 15200, 9400\nApr, 14600, 9100\nMay, 16100, 9800\nJun, 17500, 10200",
@@ -209,8 +204,6 @@ const initial: Config = {
   segmentBorders: true,
   chartSizePreset: "desktop-8",
   customWidth: String(DEFAULT_CHART_SIZE.width),
-  customHeight: String(DEFAULT_CHART_SIZE.height),
-  lockAspectRatio: true,
 };
 
 function getSelectedChartSize(config: Config): ChartOutputSize {
@@ -218,13 +211,12 @@ function getSelectedChartSize(config: Config): ChartOutputSize {
     const preset =
       CHART_SIZE_OPTIONS.find((size) => size.id === config.chartSizePreset) ??
       DEFAULT_CHART_SIZE;
-    return { preset: preset.id, width: preset.width, height: preset.height };
+    return { preset: preset.id, width: preset.width };
   }
 
   return {
     preset: "custom",
     width: Number(config.customWidth),
-    height: Number(config.customHeight),
   };
 }
 
@@ -233,50 +225,27 @@ function getChartSizeSummary(config: Config): string {
   const label =
     CHART_SIZE_OPTIONS.find((option) => option.id === size.preset)?.label ??
     "Custom";
-  return `${label.replace(" size", "")} · ${Math.round(size.width)} × ${Math.round(size.height)}`;
+  return `${label.replace(" size", "")} · ${Math.round(size.width)}w`;
 }
 
 function getChartSizeValidation(config: Config): string | null {
   if (config.chartSizePreset !== "custom") return null;
   const width = Number(config.customWidth);
-  const height = Number(config.customHeight);
-  if (
-    !Number.isFinite(width) ||
-    !Number.isFinite(height) ||
-    width <= 0 ||
-    height <= 0
-  ) {
-    return "Enter a positive width and height for your custom chart size.";
+  if (!Number.isFinite(width) || width <= 0) {
+    return "Enter a positive width for your custom chart size.";
   }
-  if (width < MIN_CUSTOM_WIDTH || height < MIN_CUSTOM_HEIGHT) {
-    return `Custom charts must be at least ${MIN_CUSTOM_WIDTH}px wide and ${MIN_CUSTOM_HEIGHT}px tall.`;
+  if (width < MIN_CUSTOM_WIDTH) {
+    return `Custom charts must be at least ${MIN_CUSTOM_WIDTH}px wide.`;
   }
   return null;
 }
 
 function updateCustomChartSize(
-  config: Config,
-  field: CustomSizeField,
+  _config: Config,
+  _field: CustomSizeField,
   value: string,
 ): Partial<Config> {
-  const patch: Partial<Config> =
-    field === "width" ? { customWidth: value } : { customHeight: value };
-  if (!config.lockAspectRatio) return patch;
-  const numberValue = Number(value);
-  if (!Number.isFinite(numberValue) || numberValue <= 0) return patch;
-  if (field === "width") {
-    patch.customHeight = String(
-      Math.max(
-        MIN_CUSTOM_HEIGHT,
-        Math.round(numberValue / LOCKED_ASPECT_RATIO),
-      ),
-    );
-  } else {
-    patch.customWidth = String(
-      Math.max(MIN_CUSTOM_WIDTH, Math.round(numberValue * LOCKED_ASPECT_RATIO)),
-    );
-  }
-  return patch;
+  return { customWidth: value };
 }
 
 /** Parse pasted CSV/TSV → rows + series names. First line treated as header if its
@@ -1312,26 +1281,12 @@ function Screen4({
                   placeholder="900"
                 />
               </Field>
-              <Field label="Height">
-                <Input
-                  value={config.customHeight}
-                  onChange={(v) =>
-                    update(updateCustomChartSize(config, "height", v))
-                  }
-                  placeholder="514"
-                />
-              </Field>
             </div>
-            <Toggle
-              label="Lock aspect ratio at 1.75:1"
-              value={config.lockAspectRatio}
-              onChange={(v) => update({ lockAspectRatio: v })}
-            />
             {sizeValidationMessage ? (
               <Banner tone="error">{sizeValidationMessage}</Banner>
             ) : (
               <p className="text-[11px] text-muted-foreground">
-                Custom charts use the exact width and height entered.
+                Height is calculated automatically from chart content.
               </p>
             )}
           </div>

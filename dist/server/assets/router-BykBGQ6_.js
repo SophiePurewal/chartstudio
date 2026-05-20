@@ -1,4 +1,4 @@
-import { N as reactExports, t as functionalUpdate$1, a as arraysEqual, g as createLRUCache, B as isPromise, C as isRedirect, A as isNotFound, x as invariant, f as createControlledPromise, X as rootRouteId, E as isServer$1, d as compileDecodeCharMap, Z as trimPath, W as rewriteBasepath, e as composeRewrites, M as processRouteTree, L as processRouteMasks, V as resolvePath, c as cleanPath, $ as trimPathRight, K as parseHref, o as executeRewriteInput, y as isDangerousProtocol, P as redirect, s as findSingleMatch, j as deepEqual, D as DEFAULT_PROTOCOL_ALLOWLIST, b as buildRouteBranch, w as interpolatePath, J as nullReplaceEqualDeep, S as replaceEqualDeep$1, H as last, i as decodePath, q as findFlatMatch, r as findRouteMatch, v as hasKeys, p as executeRewriteOutput, l as encodePathLikeUrl, _ as trimPathLeft, F as joinPaths, a1 as useRouter, k as dummyMatchContext, I as matchContext, T as requireReactDom, n as exactPathTest, Q as removeTrailingSlash, R as React, G as jsxRuntimeExports, a0 as useHydrated, m as escapeHtml, z as isInlinableStylesheet, u as getAssetCrossOrigin, U as resolveManifestAssetLink, O as Outlet } from "./server-D0QWcPH9.js";
+import { N as reactExports, t as functionalUpdate$1, a as arraysEqual, g as createLRUCache, B as isPromise, C as isRedirect, A as isNotFound, x as invariant, f as createControlledPromise, X as rootRouteId, E as isServer$1, d as compileDecodeCharMap, Z as trimPath, W as rewriteBasepath, e as composeRewrites, M as processRouteTree, L as processRouteMasks, V as resolvePath, c as cleanPath, $ as trimPathRight, K as parseHref, o as executeRewriteInput, y as isDangerousProtocol, P as redirect, s as findSingleMatch, j as deepEqual, D as DEFAULT_PROTOCOL_ALLOWLIST, b as buildRouteBranch, w as interpolatePath, J as nullReplaceEqualDeep, S as replaceEqualDeep$1, H as last, i as decodePath, q as findFlatMatch, r as findRouteMatch, v as hasKeys, p as executeRewriteOutput, l as encodePathLikeUrl, _ as trimPathLeft, F as joinPaths, a1 as useRouter, k as dummyMatchContext, I as matchContext, T as requireReactDom, n as exactPathTest, Q as removeTrailingSlash, R as React, G as jsxRuntimeExports, a0 as useHydrated, m as escapeHtml, z as isInlinableStylesheet, u as getAssetCrossOrigin, U as resolveManifestAssetLink, O as Outlet } from "./server-BybEfxix.js";
 import "node:async_hooks";
 import "node:stream/web";
 import "node:stream";
@@ -8292,19 +8292,17 @@ function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
 const CHART_SIZE_OPTIONS = [
-  { id: "desktop-12", label: "Desktop 12 column", width: 1064, height: 608 },
-  { id: "desktop-10", label: "Desktop 10 column", width: 872, height: 496 },
-  { id: "desktop-8", label: "Desktop 8 column", width: 680, height: 392 },
-  { id: "tablet-12", label: "Tablet 12 column", width: 632, height: 360 },
-  { id: "mobile-4", label: "Mobile 4 column", width: 351, height: 200 },
-  { id: "custom", label: "Custom size", width: 680, height: 392 }
+  { id: "desktop-12", label: "Desktop 12 column", width: 1064 },
+  { id: "desktop-10", label: "Desktop 10 column", width: 872 },
+  { id: "desktop-8", label: "Desktop 8 column", width: 680 },
+  { id: "tablet-12", label: "Tablet 12 column", width: 632 },
+  { id: "mobile-4", label: "Mobile 4 column", width: 351 },
+  { id: "custom", label: "Custom size", width: 680 }
 ];
 const DEFAULT_CHART_SIZE = CHART_SIZE_OPTIONS.find(
   (size) => size.id === "desktop-8"
 );
 const MIN_CUSTOM_WIDTH = 320;
-const MIN_CUSTOM_HEIGHT = 180;
-const LOCKED_ASPECT_RATIO = 1.75;
 const SAMPLE = {
   line: "Month, Revenue, Costs\nJan, 12400, 8200\nFeb, 13800, 8900\nMar, 15200, 9400\nApr, 14600, 9100\nMay, 16100, 9800\nJun, 17500, 10200",
   bar: "Quarter, 2024, 2025\nQ1, 48200, 52100\nQ2, 52900, 58700\nQ3, 61300, 64400\nQ4, 67400, 71200",
@@ -8411,56 +8409,36 @@ const initial = {
   legendPos: "right",
   segmentBorders: true,
   chartSizePreset: "desktop-8",
-  customWidth: String(DEFAULT_CHART_SIZE.width),
-  customHeight: String(DEFAULT_CHART_SIZE.height),
-  lockAspectRatio: true
+  customWidth: String(DEFAULT_CHART_SIZE.width)
 };
 function getSelectedChartSize(config) {
   if (config.chartSizePreset !== "custom") {
     const preset = CHART_SIZE_OPTIONS.find((size) => size.id === config.chartSizePreset) ?? DEFAULT_CHART_SIZE;
-    return { preset: preset.id, width: preset.width, height: preset.height };
+    return { preset: preset.id, width: preset.width };
   }
   return {
     preset: "custom",
-    width: Number(config.customWidth),
-    height: Number(config.customHeight)
+    width: Number(config.customWidth)
   };
 }
 function getChartSizeSummary(config) {
   const size = getSelectedChartSize(config);
   const label = CHART_SIZE_OPTIONS.find((option) => option.id === size.preset)?.label ?? "Custom";
-  return `${label.replace(" size", "")} · ${Math.round(size.width)} × ${Math.round(size.height)}`;
+  return `${label.replace(" size", "")} · ${Math.round(size.width)}w`;
 }
 function getChartSizeValidation(config) {
   if (config.chartSizePreset !== "custom") return null;
   const width = Number(config.customWidth);
-  const height = Number(config.customHeight);
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-    return "Enter a positive width and height for your custom chart size.";
+  if (!Number.isFinite(width) || width <= 0) {
+    return "Enter a positive width for your custom chart size.";
   }
-  if (width < MIN_CUSTOM_WIDTH || height < MIN_CUSTOM_HEIGHT) {
-    return `Custom charts must be at least ${MIN_CUSTOM_WIDTH}px wide and ${MIN_CUSTOM_HEIGHT}px tall.`;
+  if (width < MIN_CUSTOM_WIDTH) {
+    return `Custom charts must be at least ${MIN_CUSTOM_WIDTH}px wide.`;
   }
   return null;
 }
-function updateCustomChartSize(config, field, value) {
-  const patch = field === "width" ? { customWidth: value } : { customHeight: value };
-  if (!config.lockAspectRatio) return patch;
-  const numberValue = Number(value);
-  if (!Number.isFinite(numberValue) || numberValue <= 0) return patch;
-  if (field === "width") {
-    patch.customHeight = String(
-      Math.max(
-        MIN_CUSTOM_HEIGHT,
-        Math.round(numberValue / LOCKED_ASPECT_RATIO)
-      )
-    );
-  } else {
-    patch.customWidth = String(
-      Math.max(MIN_CUSTOM_WIDTH, Math.round(numberValue * LOCKED_ASPECT_RATIO))
-    );
-  }
-  return patch;
+function updateCustomChartSize(_config, _field, value) {
+  return { customWidth: value };
 }
 function parseData(text, maxSeries) {
   const errors = [];
@@ -9369,33 +9347,15 @@ function Screen4({
           ) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] text-muted-foreground", children: getChartSizeSummary(config) }),
           config.chartSizePreset === "custom" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-2 gap-2", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Width", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-                Input,
-                {
-                  value: config.customWidth,
-                  onChange: (v) => update(updateCustomChartSize(config, "width", v)),
-                  placeholder: "900"
-                }
-              ) }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Height", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-                Input,
-                {
-                  value: config.customHeight,
-                  onChange: (v) => update(updateCustomChartSize(config, "height", v)),
-                  placeholder: "514"
-                }
-              ) })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              Toggle,
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-2 gap-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Width", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              Input,
               {
-                label: "Lock aspect ratio at 1.75:1",
-                value: config.lockAspectRatio,
-                onChange: (v) => update({ lockAspectRatio: v })
+                value: config.customWidth,
+                onChange: (v) => update(updateCustomChartSize(config, "width", v)),
+                placeholder: "900"
               }
-            ),
-            sizeValidationMessage ? /* @__PURE__ */ jsxRuntimeExports.jsx(Banner, { tone: "error", children: sizeValidationMessage }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] text-muted-foreground", children: "Custom charts use the exact width and height entered." })
+            ) }) }),
+            sizeValidationMessage ? /* @__PURE__ */ jsxRuntimeExports.jsx(Banner, { tone: "error", children: sizeValidationMessage }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] text-muted-foreground", children: "Height is calculated automatically from chart content." })
           ] })
         ] }),
         (config.type === "line" || config.type === "bar") && /* @__PURE__ */ jsxRuntimeExports.jsxs(Group, { label: "Color palette", children: [

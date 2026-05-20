@@ -12,7 +12,6 @@ export type ChartSizePreset =
 export type ChartOutputSize = {
   preset: ChartSizePreset;
   width: number;
-  height: number;
 };
 export type LineStyleName =
   | "default"
