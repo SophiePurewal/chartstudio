@@ -106,6 +106,10 @@ declare const __html__: string;
 const FONT_REGULAR: FontName = { family: "Inter", style: "Regular" };
 const FONT_MEDIUM: FontName = { family: "Inter", style: "Medium" };
 const FONT_BOLD: FontName = { family: "Inter", style: "Bold" };
+const FONT_AXLE_FALLBACK: FontName = {
+  family: "Forever Forma Heading",
+  style: "Regular",
+};
 
 const PALETTES: Record<ChartPayload["palette"], string[]> = {
   standard: [
@@ -203,7 +207,7 @@ const AXLE_TITLE_STYLES = {
   mobile: "AXLE 2.0 - Light/heading/xs",
 };
 const AXLE_STYLE_FALLBACK_WARNING =
-  "AXLE title style not found. Using fallback title styling. Make sure _Core.AXLE 2.0 is enabled in this Figma file.";
+  "AXLE title style not found. Using fallback typography. Make sure _Core.AXLE 2.0 styles are enabled in this Figma file.";
 
 type ChartLayout = {
   outerWidth: number;
@@ -1642,8 +1646,34 @@ async function applyChartTitleTextStyle(
   titleNode: TextNode,
   size?: ChartOutputSize,
 ): Promise<void> {
-  const targetStyleName = getChartTitleStyleName(size);
+  const isMobileTitle =
+    getChartTitleStyleName(size) === AXLE_TITLE_STYLES.mobile;
+  const targetStyleName = isMobileTitle
+    ? AXLE_TITLE_STYLES.mobile
+    : AXLE_TITLE_STYLES.desktopTablet;
+  const fallbackTypography = isMobileTitle
+    ? { fontSize: 16, lineHeight: 20 }
+    : { fontSize: 32, lineHeight: 40 };
+  const applyFallbackTypography = async () => {
+    try {
+      await figma.loadFontAsync(FONT_AXLE_FALLBACK);
+      titleNode.fontName = FONT_AXLE_FALLBACK;
+    } catch (error) {
+      globalThis.console?.warn(
+        "Unable to load fallback font Forever Forma Heading. Falling back to Inter Regular.",
+        error,
+      );
+      titleNode.fontName = FONT_REGULAR;
+    }
+    titleNode.fontSize = fallbackTypography.fontSize;
+    titleNode.lineHeight = {
+      unit: "PIXELS",
+      value: fallbackTypography.lineHeight,
+    };
+  };
+
   const styles = (await figma.getLocalTextStylesAsync?.()) ?? [];
+  const styleNames = styles.map((style) => style.name);
   const exact = styles.find((style) => style.name === targetStyleName);
   const fallbackPatterns =
     targetStyleName === AXLE_TITLE_STYLES.mobile
@@ -1656,8 +1686,17 @@ async function applyChartTitleTextStyle(
 
   if (!style) {
     globalThis.console?.warn(AXLE_STYLE_FALLBACK_WARNING);
+    globalThis.console?.warn(
+      "Available local text styles:",
+      styleNames.length > 0 ? styleNames : "(none)",
+    );
+    await applyFallbackTypography();
     return;
   }
+
+  globalThis.console?.log(
+    `Chart title text style applied: ${style.name} (target: ${targetStyleName})`,
+  );
 
   if (titleNode.setTextStyleIdAsync) {
     await titleNode.setTextStyleIdAsync(style.id);
