@@ -47,7 +47,8 @@ await build({
 });
 
 await inlineUiAssets();
-await writeDistManifest();
+const rootManifest = await readAndValidateRootManifest();
+await writeDistManifest(rootManifest);
 
 async function inlineUiAssets() {
   const htmlPath = path.join(dist, "plugin.html");
@@ -88,23 +89,48 @@ async function inlineUiAssets() {
   await fs.rm(path.join(dist, "assets"), { recursive: true, force: true });
 }
 
-async function writeDistManifest() {
-  const manifest = JSON.parse(
-    await fs.readFile(path.join(root, "manifest.json"), "utf8"),
-  );
+async function readAndValidateRootManifest() {
+  const manifestPath = path.join(root, "manifest.json");
+  const rawManifest = await fs.readFile(manifestPath, "utf8");
+  let manifest;
 
-  await fs.writeFile(
-    path.join(dist, "manifest.json"),
-    `${JSON.stringify(
-      {
-        ...manifest,
-        main: "code.js",
-        ui: "ui.html",
-      },
-      null,
-      2,
-    )}\n`,
-  );
+  try {
+    manifest = JSON.parse(rawManifest);
+  } catch (error) {
+    throw new Error(
+      `Invalid plugin manifest JSON at ${manifestPath}: ${error.message}`,
+    );
+  }
+
+  if (!manifest || typeof manifest !== "object") {
+    throw new Error(
+      `Invalid plugin manifest at ${manifestPath}: expected a JSON object`,
+    );
+  }
+
+  if (manifest.main !== "dist/code.js" || manifest.ui !== "dist/ui.html") {
+    throw new Error(
+      `Root manifest must point to dist outputs (main: dist/code.js, ui: dist/ui.html). Found main: ${manifest.main}, ui: ${manifest.ui}`,
+    );
+  }
+
+  return manifest;
+}
+
+async function writeDistManifest(manifest) {
+  const distManifestPath = path.join(dist, "manifest.json");
+  const temporaryManifestPath = `${distManifestPath}.tmp`;
+  const distManifest = {
+    ...manifest,
+    main: "code.js",
+    ui: "ui.html",
+  };
+
+  const serializedDistManifest = `${JSON.stringify(distManifest, null, 2)}\n`;
+
+  await fs.writeFile(temporaryManifestPath, serializedDistManifest, "utf8");
+  JSON.parse(await fs.readFile(temporaryManifestPath, "utf8"));
+  await fs.rename(temporaryManifestPath, distManifestPath);
 }
 
 function escapeInlineScript(source) {
