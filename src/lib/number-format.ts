@@ -16,26 +16,28 @@ export function getNumberFormatConfig(
   };
 }
 
+export function formatNumberWithSeparators(value: number): string {
+  if (!Number.isFinite(value)) return "0";
+
+  const sign = value < 0 ? "-" : "";
+  const absoluteAsString = String(Math.abs(value));
+  const [integerPart, decimalPart] = absoluteAsString.split(".");
+  const groupedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+
+  if (!decimalPart) return `${sign}${groupedInteger}`;
+  return `${sign}${groupedInteger}.${decimalPart}`;
+}
+
 export function formatChartValue(
   value: number,
   config: NumberFormatConfig,
 ): string {
   const rounded = Math.round(value);
+  const base = config.thousands
+    ? formatNumberWithSeparators(rounded)
+    : String(rounded);
 
-  if (config.numberFormat === "currency") {
-    return new Intl.NumberFormat("en-GB", {
-      style: "currency",
-      currency: "GBP",
-      maximumFractionDigits: 0,
-      useGrouping: config.thousands,
-    }).format(rounded);
-  }
-
-  const base = new Intl.NumberFormat("en-GB", {
-    useGrouping: config.thousands,
-    maximumFractionDigits: 0,
-  }).format(rounded);
-
+  if (config.numberFormat === "currency") return `£${base}`;
   if (config.numberFormat === "percent") return `${base}%`;
   return base;
 }
