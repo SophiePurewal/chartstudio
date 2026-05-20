@@ -224,15 +224,14 @@ type ChartLayout = {
     padding: { top: number; left: number; bottom: number; right: number };
     plotWidth: number;
     plotHeight: number;
-    legendY: number;
     legendHeight: number;
+    chartAreaHeight: number;
   };
   doughnut: {
+    areaHeight: number;
     chartX: number;
     chartY: number;
     squareSize: number;
-    legendX: number;
-    legendY: number;
     legendWidth: number;
     legendHeight: number;
     legendColumns: number;
@@ -370,12 +369,12 @@ function createChartLayout(payload: ChartPayload): ChartLayout {
   const compact = size.width <= 420;
   const sectionSpacing = getChartSectionSpacing(payload.chartSize);
   const contentHeight = Math.max(
-    280,
-    Math.round(size.width * (compact ? 0.9 : 0.55)),
+    220,
+    Math.round(size.width * (compact ? 0.72 : 0.46)),
   );
   const hasLegend = payload.showLegend;
   const cartesianPadding = {
-    top: payload.title ? (compact ? 56 : 72) : compact ? 24 : 36,
+    top: compact ? 20 : 24,
     right: compact ? 16 : 36,
     bottom:
       (payload.showAxisLabels ? 26 : 10) +
@@ -398,12 +397,10 @@ function createChartLayout(payload: ChartPayload): ChartLayout {
     contentHeight - cartesianPadding.top - cartesianPadding.bottom,
   );
   const legendHeight = hasLegend ? 24 : 0;
-  const cartesianLegendY = Math.min(
-    contentHeight - legendHeight - GRID,
-    cartesianPadding.top + plotHeight + (payload.xLabel ? 62 : 38),
-  );
+  const cartesianChartAreaHeight =
+    cartesianPadding.top + plotHeight + cartesianPadding.bottom;
 
-  const doughnutTop = payload.title ? (compact ? 56 : 72) : compact ? 16 : 32;
+  const doughnutTop = compact ? 8 : 12;
   const rightLegendAllowed = payload.legendPos === "right" && size.width >= 560;
   const legendRows = Math.ceil(
     payload.rows.length / (rightLegendAllowed ? 1 : 2),
@@ -435,15 +432,9 @@ function createChartLayout(payload: ChartPayload): ChartLayout {
     : squareSize;
   const chartX = Math.max(GRID, (contentWidth - combinedWidth) / 2);
   const chartY = doughnutTop;
-  const legendX = rightLegendAllowed
-    ? chartX + squareSize + doughnutGap
-    : Math.max(GRID, (contentWidth - doughnutLegendWidth) / 2);
-  const legendY = rightLegendAllowed
-    ? chartY + Math.max(0, (squareSize - doughnutLegendHeight) / 2)
-    : Math.min(
-        contentHeight - doughnutLegendHeight - GRID,
-        chartY + squareSize + doughnutGap,
-      );
+  const doughnutAreaHeight = rightLegendAllowed
+    ? squareSize
+    : squareSize + (hasLegend ? doughnutGap + doughnutLegendHeight : 0);
 
   const hasTitle = Boolean(payload.title);
   const hasCartesianLabels =
@@ -457,12 +448,8 @@ function createChartLayout(payload: ChartPayload): ChartLayout {
       ? payload.showLegend
       : payload.showLegend && Math.max(1, payload.seriesNames.length) > 1;
   const chartAreaHeight =
-    payload.type === "doughnut" ? squareSize : contentHeight;
-  const labelsHeight = hasDoughnutLabels
-    ? contentHeight
-    : hasCartesianLabels
-      ? 64
-      : 0;
+    payload.type === "doughnut" ? doughnutAreaHeight : cartesianChartAreaHeight;
+  const labelsHeight = 0;
   const legendSectionHeight = hasLegendSection
     ? payload.type === "doughnut"
       ? doughnutLegendHeight || 24
@@ -494,15 +481,14 @@ function createChartLayout(payload: ChartPayload): ChartLayout {
       padding: cartesianPadding,
       plotWidth,
       plotHeight,
-      legendY: cartesianLegendY,
       legendHeight,
+      chartAreaHeight: cartesianChartAreaHeight,
     },
     doughnut: {
+      areaHeight: doughnutAreaHeight,
       chartX,
       chartY,
       squareSize,
-      legendX,
-      legendY,
       legendWidth: doughnutLegendWidth,
       legendHeight: doughnutLegendHeight,
       legendColumns: rightLegendAllowed ? 1 : 2,
@@ -637,13 +623,16 @@ async function createEditableBarChart(
   const chartAreaFrame = createChartSectionFrame(
     "Chart Area",
     layout.contentWidth,
-    layout.contentHeight,
+    layout.cartesian.chartAreaHeight,
   );
-  const labelsFrame = createChartSectionFrame(
+  const labelsFrame = createTransparentFrame(
     "Labels",
+    0,
+    0,
     layout.contentWidth,
-    payload.showAxisLabels || payload.xLabel || payload.yLabel ? 64 : 0,
+    layout.cartesian.chartAreaHeight,
   );
+  chartAreaFrame.appendChild(labelsFrame);
   contentFrame.appendChild(chartAreaFrame);
 
   drawGridAndAxes(
@@ -665,9 +654,6 @@ async function createEditableBarChart(
     seriesCount,
   );
   drawAxisLabels(labelsFrame, payload, padding, plotWidth, plotHeight);
-  if (payload.showAxisLabels || payload.xLabel || payload.yLabel) {
-    contentFrame.appendChild(labelsFrame);
-  }
 
   if (payload.showLegend && seriesCount > 1) {
     const legendSection = createChartSectionFrame(
@@ -715,13 +701,16 @@ async function createEditableLineChart(
     const chartAreaFrame = createChartSectionFrame(
       "Chart Area",
       layout.contentWidth,
-      layout.contentHeight,
+      layout.cartesian.chartAreaHeight,
     );
-    const labelsFrame = createChartSectionFrame(
+    const labelsFrame = createTransparentFrame(
       "Labels",
+      0,
+      0,
       layout.contentWidth,
-      payload.showAxisLabels || payload.xLabel || payload.yLabel ? 64 : 0,
+      layout.cartesian.chartAreaHeight,
     );
+    chartAreaFrame.appendChild(labelsFrame);
     contentFrame.appendChild(chartAreaFrame);
 
     drawGridAndAxes(
@@ -842,9 +831,6 @@ async function createEditableLineChart(
       plotHeight,
     );
     drawAxisLabels(labelsFrame, payload, padding, plotWidth, plotHeight);
-    if (payload.showAxisLabels || payload.xLabel || payload.yLabel) {
-      contentFrame.appendChild(labelsFrame);
-    }
 
     if (payload.showLegend && seriesCount > 1) {
       const legendSection = createChartSectionFrame(
@@ -893,9 +879,9 @@ async function createEditableDoughnutChart(
   const centerX = outerRadius;
   const centerY = outerRadius;
   const chartAreaSection = createChartSectionFrame(
-    "Chart Area",
+    "Doughnut chart area",
     layout.contentWidth,
-    layout.doughnut.squareSize,
+    layout.doughnut.areaHeight,
   );
   const doughnutFrame = withConstraints(
     createTransparentFrame(
@@ -971,13 +957,14 @@ async function createEditableDoughnutChart(
   doughnutFrame.appendChild(centerHole);
 
   chartAreaSection.appendChild(doughnutFrame);
-  contentFrame.appendChild(chartAreaSection);
 
   if (payload.showValues) {
-    const labelsSection = createChartSectionFrame(
+    const labelsSection = createTransparentFrame(
       "Labels",
+      0,
+      0,
       layout.contentWidth,
-      layout.contentHeight,
+      layout.doughnut.areaHeight,
     );
     drawDoughnutLabels(
       labelsSection,
@@ -990,10 +977,12 @@ async function createEditableDoughnutChart(
       outerRadius,
       innerRadius,
       layout.contentWidth,
-      layout.contentHeight,
+      layout.doughnut.areaHeight,
     );
-    contentFrame.appendChild(labelsSection);
+    chartAreaSection.appendChild(labelsSection);
   }
+
+  contentFrame.appendChild(chartAreaSection);
 
   if (payload.showLegend) {
     const legendSection = createChartSectionFrame(
@@ -1323,7 +1312,7 @@ function drawLegend(
     createTransparentFrame(
       "Chart legend",
       padding.left,
-      layout.cartesian.legendY,
+      0,
       plotWidth,
       layout.cartesian.legendHeight || 24,
     ),
@@ -1411,8 +1400,8 @@ function drawDoughnutLegend(
   const legendFrame = withConstraints(
     createTransparentFrame(
       "Chart legend",
-      layout.doughnut.legendX,
-      layout.doughnut.legendY,
+      Math.max(GRID, (layout.contentWidth - layout.doughnut.legendWidth) / 2),
+      0,
       layout.doughnut.legendWidth,
       layout.doughnut.legendHeight,
     ),
