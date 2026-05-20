@@ -373,13 +373,12 @@ function createChartLayout(payload: ChartPayload): ChartLayout {
     Math.round(size.width * (compact ? 0.72 : 0.46)),
   );
   const hasLegend = payload.showLegend;
+  const axisTickLabelBand = payload.showAxisLabels ? 28 : 0;
+  const xAxisTitleBand = payload.xLabel ? 36 : 0;
   const cartesianPadding = {
-    top: compact ? 20 : 24,
+    top: payload.showAxisLabels ? 8 : 0,
     right: compact ? 16 : 36,
-    bottom:
-      (payload.showAxisLabels ? 26 : 10) +
-      (payload.xLabel ? 32 : 8) +
-      (hasLegend ? 36 : 8),
+    bottom: axisTickLabelBand + xAxisTitleBand + 4,
     left: payload.yLabel
       ? compact
         ? 72
