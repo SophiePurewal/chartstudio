@@ -1394,6 +1394,7 @@ function drawLegend(
     itemsFrame.appendChild(itemFrame);
   });
   legendFrame.appendChild(itemsFrame);
+  frame.appendChild(legendFrame);
 }
 
 function drawDoughnutLegend(
@@ -1749,11 +1750,10 @@ function createLinePointMarker(
     "SCALE",
   );
   const dot = withConstraints(
-    createEllipse(`${name} circle`, 0, 0, 8, 8, color, color, 1.5),
+    createEllipse(`${name} circle`, 0, 0, 8, 8, COLORS.background, color, 1.5),
     "CENTER",
     "CENTER",
   );
-  dot.fills = [];
   dot.constrainProportions = true;
   marker.appendChild(dot);
   return marker;
