@@ -799,9 +799,7 @@ function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
 
   contentFrame.appendChild(doughnutFrame);
 
-  if (payload.showLegend) {
-    drawDoughnutLegend(contentFrame, payload, values, total, colors, layout);
-  } else {
+  if (payload.showValues) {
     drawDoughnutLabels(
       contentFrame,
       payload,
@@ -811,9 +809,14 @@ function createEditableDoughnutChart(payload: ChartPayload): FrameNode {
       doughnut.chartX,
       doughnut.chartY,
       outerRadius,
+      innerRadius,
       layout.contentWidth,
       layout.contentHeight,
     );
+  }
+
+  if (payload.showLegend) {
+    drawDoughnutLegend(contentFrame, payload, values, total, colors, layout);
   }
 
   return frame;
@@ -1320,41 +1323,154 @@ function drawDoughnutLabels(
   chartX: number,
   chartY: number,
   outerRadius: number,
+  innerRadius: number,
   contentWidth: number,
   contentHeight: number,
 ) {
+  const centerX = chartX + outerRadius;
+  const centerY = chartY + outerRadius;
+  const lineColor = payload.palette === "standard" ? null : COLORS.axis;
+  const items: {
+    row: { label: string; value: number };
+    pct: number;
+    mid: number;
+    side: "left" | "right";
+    anchorX: number;
+    anchorY: number;
+    elbowX: number;
+    targetY: number;
+  }[] = [];
+
   let angle = -Math.PI / 2;
-  values.forEach((row, index) => {
+  values.forEach((row) => {
     const nextAngle = angle + (row.value / total) * Math.PI * 2;
     const mid = (angle + nextAngle) / 2;
-    const x = Math.min(
-      contentWidth - 52,
-      Math.max(52, chartX + outerRadius + Math.cos(mid) * (outerRadius + 32)),
+    const side: "left" | "right" = Math.cos(mid) >= 0 ? "right" : "left";
+    const anchorX =
+      centerX +
+      Math.cos(mid) * (innerRadius + (outerRadius - innerRadius) * 0.65);
+    const anchorY =
+      centerY +
+      Math.sin(mid) * (innerRadius + (outerRadius - innerRadius) * 0.65);
+    const elbowX = centerX + Math.cos(mid) * (outerRadius + 12);
+    const targetY = centerY + Math.sin(mid) * (outerRadius + 22);
+    items.push({
+      row,
+      pct: (row.value / total) * 100,
+      mid,
+      side,
+      anchorX,
+      anchorY,
+      elbowX,
+      targetY,
+    });
+    angle = nextAngle;
+  });
+
+  const applyVerticalSpacing = (
+    side: "left" | "right",
+    minY: number,
+    maxY: number,
+    gap: number,
+  ) => {
+    const sideItems = items
+      .filter((item) => item.side === side)
+      .sort((a, b) => a.targetY - b.targetY);
+    let cursor = minY;
+    sideItems.forEach((item) => {
+      item.targetY = Math.max(item.targetY, cursor);
+      cursor = item.targetY + gap;
+    });
+    cursor = maxY;
+    for (let index = sideItems.length - 1; index >= 0; index -= 1) {
+      const item = sideItems[index];
+      item.targetY = Math.min(item.targetY, cursor);
+      cursor = item.targetY - gap;
+    }
+  };
+
+  applyVerticalSpacing("left", 18, contentHeight - 28, 24);
+  applyVerticalSpacing("right", 18, contentHeight - 28, 24);
+
+  items.forEach((item, index) => {
+    const labelWidth = Math.max(
+      110,
+      Math.min(168, item.row.label.length * 6 + 44),
     );
-    const y = Math.min(
-      contentHeight - 12,
-      Math.max(12, chartY + outerRadius + Math.sin(mid) * (outerRadius + 24)),
+    const labelX =
+      item.side === "right"
+        ? Math.min(contentWidth - labelWidth - 6, item.elbowX + 10)
+        : Math.max(6, item.elbowX - labelWidth - 10);
+    const valueText = payload.showPercent
+      ? `${Math.round(item.pct)}%`
+      : formatNumber(item.row.value, payload);
+
+    frame.appendChild(
+      withConstraints(
+        createLinePath(
+          `Doughnut callout radial ${index + 1} · ${item.row.label}`,
+          item.anchorX,
+          item.anchorY,
+          item.elbowX,
+          item.targetY,
+          lineColor ?? colors[index % colors.length],
+          1.25,
+        ),
+        "MIN",
+        "MIN",
+      ),
+    );
+    const horizontalEndX =
+      item.side === "right" ? labelX - 3 : labelX + labelWidth + 3;
+    frame.appendChild(
+      withConstraints(
+        createLinePath(
+          `Doughnut callout horizontal ${index + 1} · ${item.row.label}`,
+          item.elbowX,
+          item.targetY,
+          horizontalEndX,
+          item.targetY,
+          lineColor ?? colors[index % colors.length],
+          1.25,
+        ),
+        "MIN",
+        "MIN",
+      ),
     );
     frame.appendChild(
       withConstraints(
         createText(
-          payload.showPercent
-            ? `${row.label} · ${Math.round((row.value / total) * 100)}%`
-            : row.label,
+          item.row.label,
           11,
-          FONT_MEDIUM,
+          FONT_REGULAR,
           COLORS.text,
-          x - 52,
-          y - 10,
-          104,
-          20,
-          "CENTER",
+          labelX,
+          item.targetY - 12,
+          labelWidth,
+          14,
+          item.side === "right" ? "LEFT" : "RIGHT",
         ),
-        "CENTER",
-        "CENTER",
+        "MIN",
+        "MIN",
       ),
     );
-    angle = nextAngle;
+    frame.appendChild(
+      withConstraints(
+        createText(
+          valueText,
+          11,
+          FONT_REGULAR,
+          COLORS.text,
+          labelX,
+          item.targetY + 2,
+          labelWidth,
+          14,
+          item.side === "right" ? "LEFT" : "RIGHT",
+        ),
+        "MIN",
+        "MIN",
+      ),
+    );
   });
 }
 

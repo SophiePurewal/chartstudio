@@ -2227,9 +2227,16 @@ function ChartRender({
     const end = (acc / total) * Math.PI * 2 - Math.PI / 2;
     return {
       ...d,
+      start,
+      end,
       path: arcPath(r, r, r, ir, start, end),
       pct: (d.num / total) * 100,
     };
+  });
+  const callouts = arcs.map((arc) => {
+    const mid = (arc.start + arc.end) / 2;
+    const side: "left" | "right" = Math.cos(mid) >= 0 ? "right" : "left";
+    return { ...arc, mid, side };
   });
 
   const patternedSvg =
@@ -2265,7 +2272,7 @@ function ChartRender({
             : "items-center",
         )}
       >
-        <div style={{ width: size, height: size }} className="shrink-0">
+        <div style={{ width: size + 90, height: size }} className="shrink-0">
           {config.palette === "pattern-fill" && patternedSvg ? (
             <img
               src={`data:image/svg+xml;utf8,${encodeURIComponent(patternedSvg)}`}
@@ -2274,7 +2281,11 @@ function ChartRender({
               alt="Pattern filled doughnut preview"
             />
           ) : (
-            <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
+            <svg
+              viewBox={`${-50} 0 ${size + 100} ${size}`}
+              width={size + 90}
+              height={size}
+            >
               {arcs.map((a, i) => (
                 <path
                   key={i}
@@ -2286,6 +2297,63 @@ function ChartRender({
                   strokeWidth={config.segmentBorders ? 2 : 0}
                 />
               ))}
+              {config.showValues &&
+                callouts.map((a, i) => {
+                  const anchorX = r + Math.cos(a.mid) * (ir + (r - ir) * 0.65);
+                  const anchorY = r + Math.sin(a.mid) * (ir + (r - ir) * 0.65);
+                  const elbowX = r + Math.cos(a.mid) * (r + 8);
+                  const elbowY = r + Math.sin(a.mid) * (r + 12);
+                  const labelX = a.side === "right" ? size + 4 : -4;
+                  const textAnchor = a.side === "right" ? "start" : "end";
+                  const lineColor =
+                    config.palette === "standard" ? a.color : "#6B6761";
+                  return (
+                    <g key={`callout-${i}`}>
+                      <line
+                        x1={anchorX}
+                        y1={anchorY}
+                        x2={elbowX}
+                        y2={elbowY}
+                        stroke={lineColor}
+                        strokeWidth={1}
+                      />
+                      <line
+                        x1={elbowX}
+                        y1={elbowY}
+                        x2={a.side === "right" ? labelX - 2 : labelX + 2}
+                        y2={elbowY}
+                        stroke={lineColor}
+                        strokeWidth={1}
+                      />
+                      <text
+                        x={labelX}
+                        y={elbowY - 2}
+                        textAnchor={textAnchor}
+                        style={{
+                          fontSize: 8,
+                          fontWeight: 400,
+                          fill: "#281805",
+                        }}
+                      >
+                        {a.label}
+                      </text>
+                      <text
+                        x={labelX}
+                        y={elbowY + 8}
+                        textAnchor={textAnchor}
+                        style={{
+                          fontSize: 8,
+                          fontWeight: 400,
+                          fill: "#281805",
+                        }}
+                      >
+                        {config.showPercent
+                          ? `${a.pct.toFixed(0)}%`
+                          : fmt(a.num, config)}
+                      </text>
+                    </g>
+                  );
+                })}
             </svg>
           )}
         </div>
