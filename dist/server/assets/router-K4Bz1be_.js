@@ -1,4 +1,4 @@
-import { N as reactExports, t as functionalUpdate$1, a as arraysEqual, g as createLRUCache, B as isPromise, C as isRedirect, A as isNotFound, x as invariant, f as createControlledPromise, X as rootRouteId, E as isServer$1, d as compileDecodeCharMap, Z as trimPath, W as rewriteBasepath, e as composeRewrites, M as processRouteTree, L as processRouteMasks, V as resolvePath, c as cleanPath, $ as trimPathRight, K as parseHref, o as executeRewriteInput, y as isDangerousProtocol, P as redirect, s as findSingleMatch, j as deepEqual, D as DEFAULT_PROTOCOL_ALLOWLIST, b as buildRouteBranch, w as interpolatePath, J as nullReplaceEqualDeep, S as replaceEqualDeep$1, H as last, i as decodePath, q as findFlatMatch, r as findRouteMatch, v as hasKeys, p as executeRewriteOutput, l as encodePathLikeUrl, _ as trimPathLeft, F as joinPaths, a1 as useRouter, k as dummyMatchContext, I as matchContext, T as requireReactDom, n as exactPathTest, Q as removeTrailingSlash, R as React, G as jsxRuntimeExports, a0 as useHydrated, m as escapeHtml, z as isInlinableStylesheet, u as getAssetCrossOrigin, U as resolveManifestAssetLink, O as Outlet } from "./server-73djOzu3.js";
+import { N as reactExports, t as functionalUpdate$1, a as arraysEqual, g as createLRUCache, B as isPromise, C as isRedirect, A as isNotFound, x as invariant, f as createControlledPromise, X as rootRouteId, E as isServer$1, d as compileDecodeCharMap, Z as trimPath, W as rewriteBasepath, e as composeRewrites, M as processRouteTree, L as processRouteMasks, V as resolvePath, c as cleanPath, $ as trimPathRight, K as parseHref, o as executeRewriteInput, y as isDangerousProtocol, P as redirect, s as findSingleMatch, j as deepEqual, D as DEFAULT_PROTOCOL_ALLOWLIST, b as buildRouteBranch, w as interpolatePath, J as nullReplaceEqualDeep, S as replaceEqualDeep$1, H as last, i as decodePath, q as findFlatMatch, r as findRouteMatch, v as hasKeys, p as executeRewriteOutput, l as encodePathLikeUrl, _ as trimPathLeft, F as joinPaths, a1 as useRouter, k as dummyMatchContext, I as matchContext, T as requireReactDom, n as exactPathTest, Q as removeTrailingSlash, R as React, G as jsxRuntimeExports, a0 as useHydrated, m as escapeHtml, z as isInlinableStylesheet, u as getAssetCrossOrigin, U as resolveManifestAssetLink, O as Outlet } from "./server-Da_qyGZi.js";
 import "node:async_hooks";
 import "node:stream/web";
 import "node:stream";
@@ -5007,6 +5007,23 @@ function createPatternLegendSwatchSvg(patternIndex, size = 12) {
     <clipPath id="clip"><rect x="0" y="0" width="${size}" height="${size}" rx="2" /></clipPath>
   </svg>`;
 }
+function formatChartValue(value, config) {
+  const rounded = Math.round(value);
+  if (config.numberFormat === "currency") {
+    return new Intl.NumberFormat("en-GB", {
+      style: "currency",
+      currency: "GBP",
+      maximumFractionDigits: 0,
+      useGrouping: config.thousands
+    }).format(rounded);
+  }
+  const base = new Intl.NumberFormat("en-GB", {
+    useGrouping: config.thousands,
+    maximumFractionDigits: 0
+  }).format(rounded);
+  if (config.numberFormat === "percent") return `${base}%`;
+  return base;
+}
 function r(e) {
   var t, f, n = "";
   if ("string" == typeof e || "number" == typeof e) n += e;
@@ -8494,17 +8511,7 @@ function parseData(text, maxSeries) {
   return { rows, seriesNames, errors };
 }
 function fmt(n, c) {
-  const opts = { useGrouping: c.thousands };
-  if (c.numberFormat === "currency") {
-    return new Intl.NumberFormat("en-GB", {
-      style: "currency",
-      currency: "GBP",
-      maximumFractionDigits: 0,
-      ...opts
-    }).format(n);
-  }
-  if (c.numberFormat === "percent") return `${n}%`;
-  return new Intl.NumberFormat("en-GB", opts).format(n);
+  return formatChartValue(n, c);
 }
 function ChartStudioApp() {
   const [step, setStep] = reactExports.useState(1);

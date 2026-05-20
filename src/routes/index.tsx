@@ -23,6 +23,7 @@ import {
   createPatternedDoughnutSvg,
 } from "@/lib/doughnut-pattern-svg";
 import { getDoughnutPatternType } from "@/lib/doughnut-patterns";
+import { formatChartValue } from "@/lib/number-format";
 import { cn } from "@/lib/utils";
 import type {
   ChartOutputSize,
@@ -338,17 +339,7 @@ function parseData(
 }
 
 function fmt(n: number, c: Config) {
-  const opts: Intl.NumberFormatOptions = { useGrouping: c.thousands };
-  if (c.numberFormat === "currency") {
-    return new Intl.NumberFormat("en-GB", {
-      style: "currency",
-      currency: "GBP",
-      maximumFractionDigits: 0,
-      ...opts,
-    }).format(n);
-  }
-  if (c.numberFormat === "percent") return `${n}%`;
-  return new Intl.NumberFormat("en-GB", opts).format(n);
+  return formatChartValue(n, c);
 }
 
 export function ChartStudioApp() {

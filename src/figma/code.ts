@@ -2,6 +2,7 @@ import {
   createPatternLegendSwatchSvg,
   createPatternedDoughnutSvg,
 } from "../lib/doughnut-pattern-svg";
+import { formatChartValue, formatPercent } from "../lib/number-format";
 import type {
   ChartOutputSize,
   ChartPayload,
@@ -658,7 +659,7 @@ function createEditableLineChart(payload: ChartPayload): FrameNode {
             contentFrame.appendChild(
               withConstraints(
                 createText(
-                  formatNumber(point.value, payload),
+                  formatChartValue(point.value, payload),
                   10,
                   FONT_MEDIUM,
                   COLORS.mutedText,
@@ -855,7 +856,7 @@ function drawGridAndAxes(
       frame.appendChild(
         withConstraints(
           createText(
-            formatNumber(value, payload),
+            formatChartValue(value, payload),
             11,
             FONT_REGULAR,
             COLORS.mutedText,
@@ -978,7 +979,7 @@ function drawBars(
           frame.appendChild(
             withConstraints(
               createText(
-                formatNumber(value, payload),
+                formatChartValue(value, payload),
                 10,
                 FONT_MEDIUM,
                 COLORS.mutedText,
@@ -1273,8 +1274,8 @@ function drawDoughnutLegend(
       itemFrame.appendChild(withConstraints(legendSvgNode, "MIN", "CENTER"));
     }
     const valueLabel = payload.showPercent
-      ? `${Math.round((row.value / total) * 100)}%`
-      : formatNumber(row.value, payload);
+      ? formatPercent((row.value / total) * 100)
+      : formatChartValue(row.value, payload);
     itemFrame.appendChild(
       withConstraints(
         createText(
@@ -1402,8 +1403,8 @@ function drawDoughnutLabels(
         ? Math.min(contentWidth - labelWidth - 6, item.elbowX + 10)
         : Math.max(6, item.elbowX - labelWidth - 10);
     const valueText = payload.showPercent
-      ? `${Math.round(item.pct)}%`
-      : formatNumber(item.row.value, payload);
+      ? formatPercent(item.pct)
+      : formatChartValue(item.row.value, payload);
 
     frame.appendChild(
       withConstraints(
@@ -1884,16 +1885,6 @@ function niceCeil(value: number): number {
   const nice =
     normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
   return nice * magnitude;
-}
-
-function formatNumber(value: number, payload: ChartPayload): string {
-  const rounded = Math.round(value);
-  const base = payload.thousands
-    ? rounded.toLocaleString("en-GB")
-    : String(rounded);
-  if (payload.numberFormat === "currency") return `£${base}`;
-  if (payload.numberFormat === "percent") return `${base}%`;
-  return base;
 }
 
 function getChartTypeLabel(type: ChartPayload["type"]): string {
