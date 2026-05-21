@@ -38,6 +38,8 @@ export type ChartPayload = {
   showValues: boolean;
   showGrid: boolean;
   showAxisLabels: boolean;
+  showAxisTicks: boolean;
+  showYAxisLine: boolean;
   barRadius: number;
   barSpacing: "compact" | "default" | "wide";
   barLayout: "grouped" | "stacked";

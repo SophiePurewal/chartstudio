@@ -1,4 +1,4 @@
-import { N as reactExports, t as functionalUpdate$1, a as arraysEqual, g as createLRUCache, B as isPromise, C as isRedirect, A as isNotFound, x as invariant, f as createControlledPromise, X as rootRouteId, E as isServer$1, d as compileDecodeCharMap, Z as trimPath, W as rewriteBasepath, e as composeRewrites, M as processRouteTree, L as processRouteMasks, V as resolvePath, c as cleanPath, $ as trimPathRight, K as parseHref, o as executeRewriteInput, y as isDangerousProtocol, P as redirect, s as findSingleMatch, j as deepEqual, D as DEFAULT_PROTOCOL_ALLOWLIST, b as buildRouteBranch, w as interpolatePath, J as nullReplaceEqualDeep, S as replaceEqualDeep$1, H as last, i as decodePath, q as findFlatMatch, r as findRouteMatch, v as hasKeys, p as executeRewriteOutput, l as encodePathLikeUrl, _ as trimPathLeft, F as joinPaths, a1 as useRouter, k as dummyMatchContext, I as matchContext, T as requireReactDom, n as exactPathTest, Q as removeTrailingSlash, R as React, G as jsxRuntimeExports, a0 as useHydrated, m as escapeHtml, z as isInlinableStylesheet, u as getAssetCrossOrigin, U as resolveManifestAssetLink, O as Outlet } from "./server-BybEfxix.js";
+import { N as reactExports, B as isPromise, C as isRedirect, A as isNotFound, x as invariant, f as createControlledPromise, X as rootRouteId, E as isServer$1, t as functionalUpdate$1, a as arraysEqual, g as createLRUCache, d as compileDecodeCharMap, Z as trimPath, W as rewriteBasepath, e as composeRewrites, M as processRouteTree, L as processRouteMasks, V as resolvePath, c as cleanPath, $ as trimPathRight, K as parseHref, o as executeRewriteInput, y as isDangerousProtocol, P as redirect, s as findSingleMatch, j as deepEqual, D as DEFAULT_PROTOCOL_ALLOWLIST, b as buildRouteBranch, w as interpolatePath, J as nullReplaceEqualDeep, S as replaceEqualDeep$1, H as last, i as decodePath, q as findFlatMatch, r as findRouteMatch, v as hasKeys, p as executeRewriteOutput, l as encodePathLikeUrl, _ as trimPathLeft, F as joinPaths, a1 as useRouter, k as dummyMatchContext, I as matchContext, T as requireReactDom, n as exactPathTest, Q as removeTrailingSlash, R as React, G as jsxRuntimeExports, a0 as useHydrated, m as escapeHtml, z as isInlinableStylesheet, u as getAssetCrossOrigin, U as resolveManifestAssetLink, O as Outlet } from "./server-CWbDfqm0.js";
 import "node:async_hooks";
 import "node:stream/web";
 import "node:stream";
@@ -66,143 +66,6 @@ function stringifySearchWith(stringify, parser) {
     const searchStr = encode(search, stringifyValue);
     return searchStr ? `?${searchStr}` : "";
   };
-}
-function createNonReactiveMutableStore(initialValue) {
-  let value = initialValue;
-  return {
-    get() {
-      return value;
-    },
-    set(nextOrUpdater) {
-      value = functionalUpdate$1(nextOrUpdater, value);
-    }
-  };
-}
-function createNonReactiveReadonlyStore(read) {
-  return { get() {
-    return read();
-  } };
-}
-function createRouterStores(initialState, config) {
-  const { createMutableStore, createReadonlyStore, batch, init } = config;
-  const matchStores = /* @__PURE__ */ new Map();
-  const pendingMatchStores = /* @__PURE__ */ new Map();
-  const cachedMatchStores = /* @__PURE__ */ new Map();
-  const status = createMutableStore(initialState.status);
-  const loadedAt = createMutableStore(initialState.loadedAt);
-  const isLoading = createMutableStore(initialState.isLoading);
-  const isTransitioning = createMutableStore(initialState.isTransitioning);
-  const location = createMutableStore(initialState.location);
-  const resolvedLocation = createMutableStore(initialState.resolvedLocation);
-  const statusCode = createMutableStore(initialState.statusCode);
-  const redirect2 = createMutableStore(initialState.redirect);
-  const matchesId = createMutableStore([]);
-  const pendingIds = createMutableStore([]);
-  const cachedIds = createMutableStore([]);
-  const matches = createReadonlyStore(() => readPoolMatches(matchStores, matchesId.get()));
-  const pendingMatches = createReadonlyStore(() => readPoolMatches(pendingMatchStores, pendingIds.get()));
-  const cachedMatches = createReadonlyStore(() => readPoolMatches(cachedMatchStores, cachedIds.get()));
-  const firstId = createReadonlyStore(() => matchesId.get()[0]);
-  const hasPending = createReadonlyStore(() => matchesId.get().some((matchId) => {
-    return matchStores.get(matchId)?.get().status === "pending";
-  }));
-  const matchRouteDeps = createReadonlyStore(() => ({
-    locationHref: location.get().href,
-    resolvedLocationHref: resolvedLocation.get()?.href,
-    status: status.get()
-  }));
-  const __store = createReadonlyStore(() => ({
-    status: status.get(),
-    loadedAt: loadedAt.get(),
-    isLoading: isLoading.get(),
-    isTransitioning: isTransitioning.get(),
-    matches: matches.get(),
-    location: location.get(),
-    resolvedLocation: resolvedLocation.get(),
-    statusCode: statusCode.get(),
-    redirect: redirect2.get()
-  }));
-  const matchStoreByRouteIdCache = createLRUCache(64);
-  function getRouteMatchStore(routeId) {
-    let cached = matchStoreByRouteIdCache.get(routeId);
-    if (!cached) {
-      cached = createReadonlyStore(() => {
-        const ids = matchesId.get();
-        for (const id of ids) {
-          const matchStore = matchStores.get(id);
-          if (matchStore && matchStore.routeId === routeId) return matchStore.get();
-        }
-      });
-      matchStoreByRouteIdCache.set(routeId, cached);
-    }
-    return cached;
-  }
-  const store = {
-    status,
-    loadedAt,
-    isLoading,
-    isTransitioning,
-    location,
-    resolvedLocation,
-    statusCode,
-    redirect: redirect2,
-    matchesId,
-    pendingIds,
-    cachedIds,
-    matches,
-    pendingMatches,
-    cachedMatches,
-    firstId,
-    hasPending,
-    matchRouteDeps,
-    matchStores,
-    pendingMatchStores,
-    cachedMatchStores,
-    __store,
-    getRouteMatchStore,
-    setMatches,
-    setPending,
-    setCached
-  };
-  setMatches(initialState.matches);
-  init?.(store);
-  function setMatches(nextMatches) {
-    reconcileMatchPool(nextMatches, matchStores, matchesId, createMutableStore, batch);
-  }
-  function setPending(nextMatches) {
-    reconcileMatchPool(nextMatches, pendingMatchStores, pendingIds, createMutableStore, batch);
-  }
-  function setCached(nextMatches) {
-    reconcileMatchPool(nextMatches, cachedMatchStores, cachedIds, createMutableStore, batch);
-  }
-  return store;
-}
-function readPoolMatches(pool, ids) {
-  const matches = [];
-  for (const id of ids) {
-    const matchStore = pool.get(id);
-    if (matchStore) matches.push(matchStore.get());
-  }
-  return matches;
-}
-function reconcileMatchPool(nextMatches, pool, idStore, createMutableStore, batch) {
-  const nextIds = nextMatches.map((d) => d.id);
-  const nextIdSet = new Set(nextIds);
-  batch(() => {
-    for (const id of pool.keys()) if (!nextIdSet.has(id)) pool.delete(id);
-    for (const nextMatch of nextMatches) {
-      const existing = pool.get(nextMatch.id);
-      if (!existing) {
-        const matchStore = createMutableStore(nextMatch);
-        matchStore.routeId = nextMatch.routeId;
-        pool.set(nextMatch.id, matchStore);
-        continue;
-      }
-      existing.routeId = nextMatch.routeId;
-      if (existing.get() !== nextMatch) existing.set(nextMatch);
-    }
-    if (!arraysEqual(idStore.get(), nextIds)) idStore.set(nextIds);
-  });
 }
 const triggerOnReady = (inner) => {
   if (!inner.rendered) {
@@ -839,6 +702,143 @@ const componentTypes = [
   "pendingComponent",
   "notFoundComponent"
 ];
+function createNonReactiveMutableStore(initialValue) {
+  let value = initialValue;
+  return {
+    get() {
+      return value;
+    },
+    set(nextOrUpdater) {
+      value = functionalUpdate$1(nextOrUpdater, value);
+    }
+  };
+}
+function createNonReactiveReadonlyStore(read) {
+  return { get() {
+    return read();
+  } };
+}
+function createRouterStores(initialState, config) {
+  const { createMutableStore, createReadonlyStore, batch, init } = config;
+  const matchStores = /* @__PURE__ */ new Map();
+  const pendingMatchStores = /* @__PURE__ */ new Map();
+  const cachedMatchStores = /* @__PURE__ */ new Map();
+  const status = createMutableStore(initialState.status);
+  const loadedAt = createMutableStore(initialState.loadedAt);
+  const isLoading = createMutableStore(initialState.isLoading);
+  const isTransitioning = createMutableStore(initialState.isTransitioning);
+  const location = createMutableStore(initialState.location);
+  const resolvedLocation = createMutableStore(initialState.resolvedLocation);
+  const statusCode = createMutableStore(initialState.statusCode);
+  const redirect2 = createMutableStore(initialState.redirect);
+  const matchesId = createMutableStore([]);
+  const pendingIds = createMutableStore([]);
+  const cachedIds = createMutableStore([]);
+  const matches = createReadonlyStore(() => readPoolMatches(matchStores, matchesId.get()));
+  const pendingMatches = createReadonlyStore(() => readPoolMatches(pendingMatchStores, pendingIds.get()));
+  const cachedMatches = createReadonlyStore(() => readPoolMatches(cachedMatchStores, cachedIds.get()));
+  const firstId = createReadonlyStore(() => matchesId.get()[0]);
+  const hasPending = createReadonlyStore(() => matchesId.get().some((matchId) => {
+    return matchStores.get(matchId)?.get().status === "pending";
+  }));
+  const matchRouteDeps = createReadonlyStore(() => ({
+    locationHref: location.get().href,
+    resolvedLocationHref: resolvedLocation.get()?.href,
+    status: status.get()
+  }));
+  const __store = createReadonlyStore(() => ({
+    status: status.get(),
+    loadedAt: loadedAt.get(),
+    isLoading: isLoading.get(),
+    isTransitioning: isTransitioning.get(),
+    matches: matches.get(),
+    location: location.get(),
+    resolvedLocation: resolvedLocation.get(),
+    statusCode: statusCode.get(),
+    redirect: redirect2.get()
+  }));
+  const matchStoreByRouteIdCache = createLRUCache(64);
+  function getRouteMatchStore(routeId) {
+    let cached = matchStoreByRouteIdCache.get(routeId);
+    if (!cached) {
+      cached = createReadonlyStore(() => {
+        const ids = matchesId.get();
+        for (const id of ids) {
+          const matchStore = matchStores.get(id);
+          if (matchStore && matchStore.routeId === routeId) return matchStore.get();
+        }
+      });
+      matchStoreByRouteIdCache.set(routeId, cached);
+    }
+    return cached;
+  }
+  const store = {
+    status,
+    loadedAt,
+    isLoading,
+    isTransitioning,
+    location,
+    resolvedLocation,
+    statusCode,
+    redirect: redirect2,
+    matchesId,
+    pendingIds,
+    cachedIds,
+    matches,
+    pendingMatches,
+    cachedMatches,
+    firstId,
+    hasPending,
+    matchRouteDeps,
+    matchStores,
+    pendingMatchStores,
+    cachedMatchStores,
+    __store,
+    getRouteMatchStore,
+    setMatches,
+    setPending,
+    setCached
+  };
+  setMatches(initialState.matches);
+  init?.(store);
+  function setMatches(nextMatches) {
+    reconcileMatchPool(nextMatches, matchStores, matchesId, createMutableStore, batch);
+  }
+  function setPending(nextMatches) {
+    reconcileMatchPool(nextMatches, pendingMatchStores, pendingIds, createMutableStore, batch);
+  }
+  function setCached(nextMatches) {
+    reconcileMatchPool(nextMatches, cachedMatchStores, cachedIds, createMutableStore, batch);
+  }
+  return store;
+}
+function readPoolMatches(pool, ids) {
+  const matches = [];
+  for (const id of ids) {
+    const matchStore = pool.get(id);
+    if (matchStore) matches.push(matchStore.get());
+  }
+  return matches;
+}
+function reconcileMatchPool(nextMatches, pool, idStore, createMutableStore, batch) {
+  const nextIds = nextMatches.map((d) => d.id);
+  const nextIdSet = new Set(nextIds);
+  batch(() => {
+    for (const id of pool.keys()) if (!nextIdSet.has(id)) pool.delete(id);
+    for (const nextMatch of nextMatches) {
+      const existing = pool.get(nextMatch.id);
+      if (!existing) {
+        const matchStore = createMutableStore(nextMatch);
+        matchStore.routeId = nextMatch.routeId;
+        pool.set(nextMatch.id, matchStore);
+        continue;
+      }
+      existing.routeId = nextMatch.routeId;
+      if (existing.get() !== nextMatch) existing.set(nextMatch);
+    }
+    if (!arraysEqual(idStore.get(), nextIds)) idStore.set(nextIds);
+  });
+}
 function getLocationChangeInfo(location, resolvedLocation) {
   const fromLocation = resolvedLocation;
   const toLocation = location;
@@ -850,6 +850,7 @@ function getLocationChangeInfo(location, resolvedLocation) {
     hashChanged: fromLocation?.hash !== toLocation.hash
   };
 }
+const locationHistoryActions = /* @__PURE__ */ new WeakMap();
 var RouterCore = class {
   /**
   * @deprecated Use the `createRouter` function instead
@@ -1149,6 +1150,7 @@ var RouterCore = class {
       return buildWithMatches(opts);
     };
     this.commitLocation = async ({ viewTransition, ignoreBlocker, ...next }) => {
+      let historyAction;
       const isSameState = () => {
         const ignoredProps = [
           "key",
@@ -1197,10 +1199,11 @@ var RouterCore = class {
         }
         nextHistory.state.__hashScrollIntoViewOptions = hashScrollIntoView ?? this.options.defaultHashScrollIntoView ?? true;
         this.shouldViewTransition = viewTransition;
-        this.history[next.replace ? "replace" : "push"](nextHistory.publicHref, nextHistory.state, { ignoreBlocker });
+        historyAction = next.replace ? "REPLACE" : "PUSH";
+        this.history[historyAction === "REPLACE" ? "replace" : "push"](nextHistory.publicHref, nextHistory.state, { ignoreBlocker });
       }
       this.resetNextScroll = next.resetScroll ?? true;
-      if (!this.history.subscribers.size) this.load();
+      if (!this.history.subscribers.size) this.load(historyAction ? { action: { type: historyAction } } : void 0);
       return this.commitLocationPromise;
     };
     this.buildAndCommitLocation = ({ replace, resetScroll, hashScrollIntoView, viewTransition, ignoreBlocker, href, ...rest } = {}) => {
@@ -1305,6 +1308,7 @@ var RouterCore = class {
       });
     };
     this.load = async (opts) => {
+      const historyAction = opts?.action?.type;
       let redirect2;
       let notFound;
       let loadPromise;
@@ -1313,6 +1317,8 @@ var RouterCore = class {
         this.startTransition(async () => {
           try {
             this.beforeLoad();
+            if (historyAction) locationHistoryActions.set(this.latestLocation, historyAction);
+            else locationHistoryActions.delete(this.latestLocation);
             const next = this.latestLocation;
             const locationChangeInfo = getLocationChangeInfo(next, this.stores.resolvedLocation.get());
             if (!this.stores.redirect.get()) this.emit({
@@ -8401,6 +8407,8 @@ const initial = {
   showPoints: true,
   showGrid: true,
   showAxisLabels: true,
+  showAxisTicks: true,
+  showYAxisLine: true,
   barRadius: 3,
   barSpacing: "default",
   barLayout: "grouped",
@@ -8587,6 +8595,8 @@ function ChartStudioApp() {
       showValues: config.showValues,
       showGrid: config.showGrid,
       showAxisLabels: config.showAxisLabels,
+      showAxisTicks: config.showAxisTicks,
+      showYAxisLine: config.showYAxisLine,
       barRadius: config.barRadius,
       barSpacing: config.barSpacing,
       barLayout: config.barLayout,
@@ -9429,8 +9439,16 @@ function Screen4({
               Toggle,
               {
                 label: "Show axis ticks",
-                value: config.showAxisLabels,
-                onChange: (v) => update({ showAxisLabels: v })
+                value: config.showAxisTicks,
+                onChange: (v) => update({ showAxisTicks: v })
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              Toggle,
+              {
+                label: "Show Y-axis line",
+                value: config.showYAxisLine,
+                onChange: (v) => update({ showYAxisLine: v })
               }
             )
           ] })
@@ -9485,8 +9503,16 @@ function Screen4({
               Toggle,
               {
                 label: "Show axis ticks",
-                value: config.showAxisLabels,
-                onChange: (v) => update({ showAxisLabels: v })
+                value: config.showAxisTicks,
+                onChange: (v) => update({ showAxisTicks: v })
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              Toggle,
+              {
+                label: "Show Y-axis line",
+                value: config.showYAxisLine,
+                onChange: (v) => update({ showYAxisLine: v })
               }
             )
           ] })
