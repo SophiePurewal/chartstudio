@@ -1590,9 +1590,8 @@ function composeRewrites(rewrites) {
 function rewriteBasepath(opts) {
   const trimmedBasepath = trimPath(opts.basepath);
   const normalizedBasepath = `/${trimmedBasepath}`;
-  const normalizedBasepathWithSlash = `${normalizedBasepath}/`;
   const checkBasepath = opts.caseSensitive ? normalizedBasepath : normalizedBasepath.toLowerCase();
-  const checkBasepathWithSlash = opts.caseSensitive ? normalizedBasepathWithSlash : normalizedBasepathWithSlash.toLowerCase();
+  const checkBasepathWithSlash = `${checkBasepath}/`;
   return {
     input: ({ url }) => {
       const pathname = opts.caseSensitive ? url.pathname : url.pathname.toLowerCase();
@@ -15968,7 +15967,7 @@ function getResponse() {
 }
 var HEADERS = { TSS_SHELL: "X-TSS_SHELL" };
 async function getStartManifest(matchedRoutes) {
-  const { tsrStartManifest } = await import("./_tanstack-start-manifest_v-BMAXtPwT.js");
+  const { tsrStartManifest } = await import("./_tanstack-start-manifest_v-Dt_MUckn.js");
   const startManifest = tsrStartManifest();
   const rootRoute = startManifest.routes[rootRouteId] = startManifest.routes[rootRouteId] || {};
   rootRoute.assets = rootRoute.assets || [];
@@ -17054,8 +17053,8 @@ var getBaseManifest = getProdBaseManifest;
 var createEarlyHintsForRequest = createEarlyHintsCollector;
 async function loadEntries() {
   const [routerEntry, startEntry, pluginAdapters] = await Promise.all([
-    import("./router-BykBGQ6_.js"),
-    import("./start-DbCiEisG.js"),
+    import("./router-CgzoH-aO.js"),
+    import("./start-C1Tgyoeh.js"),
     import("./__23tanstack-start-plugin-adapters-Cwee5PKy.js")
   ]);
   return {

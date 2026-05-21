@@ -62,6 +62,8 @@ type Config = {
   showPoints: boolean;
   showGrid: boolean;
   showAxisLabels: boolean;
+  showAxisTicks: boolean;
+  showYAxisLine: boolean;
   // bar
   barRadius: number;
   barSpacing: "compact" | "default" | "wide";
@@ -195,6 +197,8 @@ const initial: Config = {
   showPoints: true,
   showGrid: true,
   showAxisLabels: true,
+  showAxisTicks: true,
+  showYAxisLine: true,
   barRadius: 3,
   barSpacing: "default",
   barLayout: "grouped",
@@ -437,6 +441,8 @@ export function ChartStudioApp() {
       showValues: config.showValues,
       showGrid: config.showGrid,
       showAxisLabels: config.showAxisLabels,
+      showAxisTicks: config.showAxisTicks,
+      showYAxisLine: config.showYAxisLine,
       barRadius: config.barRadius,
       barSpacing: config.barSpacing,
       barLayout: config.barLayout,
@@ -1355,8 +1361,13 @@ function Screen4({
             />
             <Toggle
               label="Show axis ticks"
-              value={config.showAxisLabels}
-              onChange={(v) => update({ showAxisLabels: v })}
+              value={config.showAxisTicks}
+              onChange={(v) => update({ showAxisTicks: v })}
+            />
+            <Toggle
+              label="Show Y-axis line"
+              value={config.showYAxisLine}
+              onChange={(v) => update({ showYAxisLine: v })}
             />
           </Group>
         </>
@@ -1411,8 +1422,13 @@ function Screen4({
             />
             <Toggle
               label="Show axis ticks"
-              value={config.showAxisLabels}
-              onChange={(v) => update({ showAxisLabels: v })}
+              value={config.showAxisTicks}
+              onChange={(v) => update({ showAxisTicks: v })}
+            />
+            <Toggle
+              label="Show Y-axis line"
+              value={config.showYAxisLine}
+              onChange={(v) => update({ showYAxisLine: v })}
             />
           </Group>
         </>

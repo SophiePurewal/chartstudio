@@ -204,6 +204,7 @@ const DEFAULT_CHART_SIZE: ChartOutputSize = {
 const MIN_CUSTOM_WIDTH = 320;
 const CHART_FRAME_PADDING = 8;
 const DESKTOP_SECTION_SPACING = 48;
+const LINE_SECTION_SPACING = 32;
 const COMPACT_SECTION_SPACING = 16;
 const GRID = 8;
 const MOBILE_CUSTOM_WIDTH_MAX = 480;
@@ -367,7 +368,7 @@ function createChartLayout(payload: ChartPayload): ChartLayout {
   const size = resolveChartSize(payload.chartSize);
   const contentWidth = size.width - CHART_FRAME_PADDING * 2;
   const compact = size.width <= 420;
-  const sectionSpacing = getChartSectionSpacing(payload.chartSize);
+  const sectionSpacing = getChartSectionSpacing(payload);
   const contentHeight = Math.max(
     220,
     Math.round(size.width * (compact ? 0.72 : 0.46)),
@@ -504,8 +505,17 @@ function createChartLayout(payload: ChartPayload): ChartLayout {
   };
 }
 
-function getChartSectionSpacing(size?: ChartOutputSize): number {
-  const resolved = resolveChartSize(size);
+function getChartSectionSpacing(payload: ChartPayload): number {
+  const resolved = resolveChartSize(payload.chartSize);
+  if (payload.type === "line") {
+    if (resolved.preset === "mobile-4") return COMPACT_SECTION_SPACING;
+    if (resolved.preset === "custom") {
+      return resolved.width > MOBILE_CUSTOM_WIDTH_MAX
+        ? LINE_SECTION_SPACING
+        : COMPACT_SECTION_SPACING;
+    }
+    return LINE_SECTION_SPACING;
+  }
   if (resolved.preset === "tablet-12" || resolved.preset === "mobile-4") {
     return COMPACT_SECTION_SPACING;
   }
@@ -564,7 +574,7 @@ async function createBaseFrame(
   contentFrame.fills = [];
   contentFrame.clipsContent = false;
   contentFrame.layoutMode = "VERTICAL";
-  contentFrame.itemSpacing = getChartSectionSpacing(payload.chartSize);
+  contentFrame.itemSpacing = getChartSectionSpacing(payload);
   contentFrame.primaryAxisSizingMode = "AUTO";
   contentFrame.counterAxisSizingMode = "FIXED";
   setConstraints(contentFrame, "MIN", "MIN");
@@ -1043,10 +1053,10 @@ function drawGridAndAxes(
             11,
             FONT_REGULAR,
             COLORS.mutedText,
-            16,
+            20,
             y - 8,
             58,
-            16,
+            20,
             "RIGHT",
           ),
           "MIN",
@@ -1071,21 +1081,23 @@ function drawGridAndAxes(
       "SCALE",
     ),
   );
-  frame.appendChild(
-    withConstraints(
-      createLinePath(
-        "Y axis",
-        padding.left,
-        padding.top,
-        padding.left,
-        padding.top + plotHeight,
-        COLORS.axis,
-        1,
+  if (payload.showYAxisLine) {
+    frame.appendChild(
+      withConstraints(
+        createLinePath(
+          "Y axis",
+          padding.left,
+          padding.top,
+          padding.left,
+          padding.top + plotHeight,
+          COLORS.axis,
+          1,
+        ),
+        "SCALE",
+        "SCALE",
       ),
-      "SCALE",
-      "SCALE",
-    ),
-  );
+    );
+  }
 }
 
 function drawBars(
@@ -1199,6 +1211,36 @@ function drawBars(
         ),
       );
     }
+  });
+}
+
+function drawXAxisTicks(
+  frame: FrameNode,
+  payload: ChartPayload,
+  rows: { label: string; values: number[] }[],
+  padding: { top: number; left: number; bottom: number; right: number },
+  plotWidth: number,
+  plotHeight: number,
+) {
+  if (payload.type !== "line" || !payload.showAxisTicks) return;
+  const denominator = Math.max(rows.length - 1, 1);
+  rows.forEach((_row, rowIndex) => {
+    const x = padding.left + (plotWidth * rowIndex) / denominator;
+    frame.appendChild(
+      withConstraints(
+        createLinePath(
+          `X tick ${rowIndex + 1}`,
+          x,
+          padding.top + plotHeight,
+          x,
+          padding.top + plotHeight + 6,
+          COLORS.axis,
+          1,
+        ),
+        "SCALE",
+        "SCALE",
+      ),
+    );
   });
 }
 
@@ -1358,21 +1400,61 @@ function drawLegend(
       "MIN",
       "CENTER",
     );
-    itemFrame.appendChild(
-      withConstraints(
-        createRectangle(
-          `Legend color · ${name}`,
-          0,
-          5,
-          10,
-          10,
-          colors[index % colors.length],
-          2,
+    const swatchY = 10;
+    if (payload.type === "line") {
+      const lineStyle = getLineStyle(
+        payload,
+        index,
+        payload.seriesNames.length,
+      );
+      itemFrame.appendChild(
+        withConstraints(
+          createVectorPath(
+            `Legend line · ${name}`,
+            `M 0 ${formatCoordinate(swatchY)} L 14 ${formatCoordinate(swatchY)}`,
+            colors[index % colors.length],
+            Math.max(1, getFiniteNumber(payload.lineWeight, 1)),
+            lineStyle,
+          ),
+          "MIN",
+          "CENTER",
         ),
-        "MIN",
-        "CENTER",
-      ),
-    );
+      );
+    } else {
+      itemFrame.appendChild(
+        withConstraints(
+          createRectangle(
+            `Legend color · ${name}`,
+            0,
+            5,
+            10,
+            10,
+            colors[index % colors.length],
+            2,
+          ),
+          "MIN",
+          "CENTER",
+        ),
+      );
+    }
+    if (payload.type === "line" && payload.showPoints) {
+      itemFrame.appendChild(
+        withConstraints(
+          createEllipse(
+            `Legend point · ${name}`,
+            7 - (payload.lineWeight + 1),
+            swatchY - (payload.lineWeight + 1),
+            (payload.lineWeight + 1) * 2,
+            (payload.lineWeight + 1) * 2,
+            COLORS.background,
+            colors[index % colors.length],
+            payload.lineWeight,
+          ),
+          "MIN",
+          "CENTER",
+        ),
+      );
+    }
     itemFrame.appendChild(
       withConstraints(
         createText(
@@ -1380,10 +1462,10 @@ function drawLegend(
           11,
           FONT_REGULAR,
           COLORS.text,
-          16,
+          20,
           2,
           Math.max(24, itemWidth - 20),
-          16,
+          20,
           "LEFT",
         ),
         "STRETCH",
@@ -1782,6 +1864,8 @@ function createText(
   text.fills = [solid(color)];
   text.textAlignHorizontal = align;
   text.textAlignVertical = "CENTER";
+  (text as TextNode & { textAutoResize?: "WIDTH_AND_HEIGHT" }).textAutoResize =
+    "WIDTH_AND_HEIGHT";
   return text;
 }
 
