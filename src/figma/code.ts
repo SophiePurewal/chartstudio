@@ -204,7 +204,6 @@ const DEFAULT_CHART_SIZE: ChartOutputSize = {
 const MIN_CUSTOM_WIDTH = 320;
 const CHART_FRAME_PADDING = 8;
 const DESKTOP_SECTION_SPACING = 48;
-const LINE_SECTION_SPACING = 32;
 const COMPACT_SECTION_SPACING = 16;
 const AXIS_TICK_LABEL_WIDTH = 58;
 const AXIS_TICK_LABEL_X = 20;
@@ -511,7 +510,7 @@ function createChartLayout(payload: ChartPayload): ChartLayout {
 function getChartSectionSpacing(payload: ChartPayload): number {
   const resolved = resolveChartSize(payload.chartSize);
   if (payload.type === "line") {
-    return COMPACT_SECTION_SPACING;
+    return getLineChartLegendSpacing();
   }
   if (resolved.preset === "tablet-12" || resolved.preset === "mobile-4") {
     return COMPACT_SECTION_SPACING;
@@ -522,6 +521,10 @@ function getChartSectionSpacing(payload: ChartPayload): number {
       : COMPACT_SECTION_SPACING;
   }
   return DESKTOP_SECTION_SPACING;
+}
+
+function getLineChartLegendSpacing(): number {
+  return 16;
 }
 
 function finalizeChartFrame(frame: FrameNode, layout: ChartLayout): void {
@@ -1045,7 +1048,7 @@ function drawGridAndAxes(
     if (payload.showAxisLabels) {
       const axisLabelValue =
         payload.type === "line"
-          ? formatLineYAxisTickValue(value, payload)
+          ? formatAxisTickCompact(value, payload)
           : formatChartValue(value, getValueFormatterConfig(payload));
       frame.appendChild(
         withConstraints(
@@ -1321,6 +1324,17 @@ function drawAxisLabels(
   }
 
   if (payload.yLabel) {
+    const yAxisX = padding.left;
+    const plotTop = padding.top;
+    const yAxisTitleHeight = TEXT_STYLES.axisTitle.lineHeight;
+    const yAxisTitleWidth = plotHeight;
+    const yAxisTitlePosition = positionYAxisTitle({
+      plotTop,
+      plotHeight,
+      yAxisX,
+      yAxisTitleWidth,
+      yAxisTitleHeight,
+    });
     const yLabelAreaWidth = Math.max(32, padding.left);
     const yLabelArea = withConstraints(
       createTransparentFrame(
@@ -1339,10 +1353,10 @@ function drawAxisLabels(
         TEXT_STYLES.axisTitle.fontSize,
         TEXT_STYLES.axisTitle.font,
         COLORS.text,
-        getYAxisTitleXPosition(padding.left),
-        (plotHeight - TEXT_STYLES.axisTitle.lineHeight) / 2,
-        plotHeight,
-        TEXT_STYLES.axisTitle.lineHeight,
+        yAxisTitlePosition.x,
+        yAxisTitlePosition.y,
+        yAxisTitleWidth,
+        yAxisTitleHeight,
         "CENTER",
       ),
       "CENTER",
@@ -1408,7 +1422,7 @@ function drawLegend(
         index,
         payload.seriesNames.length,
       );
-      appendLegendLineSwatch(
+      createLineLegendSwatch(
         itemFrame,
         name,
         swatchY,
@@ -1531,6 +1545,28 @@ function appendLegendLineSwatch(
   );
 }
 
+function createLineLegendSwatch(
+  itemFrame: FrameNode,
+  seriesName: string,
+  swatchY: number,
+  color: RGB,
+  lineWeight: number,
+  lineStyle: {
+    dashPattern?: number[];
+    double?: boolean;
+    strokeCap: "NONE" | "ROUND" | "SQUARE";
+  },
+) {
+  appendLegendLineSwatch(
+    itemFrame,
+    seriesName,
+    swatchY,
+    color,
+    lineWeight,
+    lineStyle,
+  );
+}
+
 function getYAxisTitleXPosition(yAxisX: number): number {
   const tickLabelRightEdge = AXIS_TICK_LABEL_X + AXIS_TICK_LABEL_WIDTH;
   const titleCenterX = Math.max(
@@ -1540,10 +1576,27 @@ function getYAxisTitleXPosition(yAxisX: number): number {
   return titleCenterX - TEXT_STYLES.axisTitle.lineHeight / 2;
 }
 
-function formatLineYAxisTickValue(
-  value: number,
-  payload: ChartPayload,
-): string {
+function positionYAxisTitle({
+  plotTop,
+  plotHeight,
+  yAxisX,
+  yAxisTitleWidth,
+  yAxisTitleHeight,
+}: {
+  plotTop: number;
+  plotHeight: number;
+  yAxisX: number;
+  yAxisTitleWidth: number;
+  yAxisTitleHeight: number;
+}): { x: number; y: number } {
+  const y = plotTop + (plotHeight - yAxisTitleHeight) / 2 - plotTop;
+  return {
+    x: getYAxisTitleXPosition(yAxisX),
+    y,
+  };
+}
+
+function formatAxisTickCompact(value: number, payload: ChartPayload): string {
   if (payload.numberFormat === "percent") {
     return formatChartValue(value, getValueFormatterConfig(payload));
   }
