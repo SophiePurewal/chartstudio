@@ -38,6 +38,8 @@ type FrameNode = SceneNode & {
   primaryAxisSizingMode?: "FIXED" | "AUTO";
   counterAxisSizingMode?: "FIXED" | "AUTO";
   layoutAlign?: "INHERIT" | "STRETCH";
+  primaryAxisAlignItems?: "MIN" | "CENTER" | "MAX" | "SPACE_BETWEEN";
+  counterAxisAlignItems?: "MIN" | "CENTER" | "MAX" | "BASELINE";
 };
 type RectangleNode = SceneNode & {
   fills: Paint[];
@@ -208,6 +210,7 @@ const COMPACT_SECTION_SPACING = 16;
 const AXIS_TICK_LABEL_WIDTH = 58;
 const AXIS_TICK_LABEL_GUTTER_MIN = 64;
 const Y_AXIS_TITLE_GAP = 12;
+const LABEL_TO_CHART_GAP = 4;
 const Y_AXIS_TITLE_GUTTER_MIN = 22;
 const GRID = 8;
 const MOBILE_CUSTOM_WIDTH_MAX = 480;
@@ -658,7 +661,7 @@ async function createEditableBarChart(
     layout.contentWidth,
     layout.cartesian.chartAreaHeight,
   );
-  chartAreaFrame.appendChild(labelsFrame);
+  contentFrame.appendChild(labelsFrame);
   contentFrame.appendChild(chartAreaFrame);
 
   drawGridAndAxes(
@@ -679,6 +682,7 @@ async function createEditableBarChart(
     niceMax,
     seriesCount,
   );
+  drawYAxisTickLabels(labelsFrame, payload, padding, plotHeight, niceMax);
   drawAxisLabels(labelsFrame, payload, padding, plotWidth, plotHeight, layout);
 
   if (payload.showLegend && seriesCount > 1) {
@@ -739,7 +743,7 @@ async function createEditableLineChart(
       layout.contentWidth,
       layout.cartesian.chartAreaHeight,
     );
-    chartAreaFrame.appendChild(labelsFrame);
+    contentFrame.appendChild(labelsFrame);
     contentFrame.appendChild(chartAreaFrame);
 
     drawGridAndAxes(
@@ -851,6 +855,7 @@ async function createEditableLineChart(
       }
     }
 
+    drawYAxisTickLabels(labelsFrame, payload, padding, plotHeight, niceMax);
     drawXAxisCategoryLabels(
       labelsFrame,
       payload,
@@ -1063,29 +1068,6 @@ function drawGridAndAxes(
         ),
       );
     }
-    if (payload.showAxisLabels) {
-      const axisLabelValue =
-        payload.type === "line"
-          ? formatAxisTickCompact(value, payload)
-          : formatChartValue(value, getValueFormatterConfig(payload));
-      frame.appendChild(
-        withConstraints(
-          createText(
-            axisLabelValue,
-            11,
-            FONT_REGULAR,
-            COLORS.mutedText,
-            Math.max(0, padding.left - AXIS_TICK_LABEL_WIDTH),
-            y - 8,
-            AXIS_TICK_LABEL_WIDTH,
-            20,
-            "RIGHT",
-          ),
-          "MIN",
-          "SCALE",
-        ),
-      );
-    }
   }
 
   frame.appendChild(
@@ -1264,6 +1246,72 @@ function drawXAxisTicks(
       ),
     );
   });
+}
+
+function drawYAxisTickLabels(
+  frame: FrameNode,
+  payload: ChartPayload,
+  padding: { top: number; left: number; bottom: number; right: number },
+  plotHeight: number,
+  niceMax: number,
+) {
+  if (!payload.showAxisLabels) return;
+  const steps = 4;
+  const labelColumn = withConstraints(
+    createAutoLayoutFrame(
+      "Y axis tick labels",
+      0,
+      padding.top,
+      "VERTICAL",
+      0,
+      "AUTO",
+      "AUTO",
+    ),
+    "MIN",
+    "MIN",
+  );
+  labelColumn.primaryAxisAlignItems = "SPACE_BETWEEN";
+  if (labelColumn.resize) labelColumn.resize(AXIS_TICK_LABEL_WIDTH, plotHeight);
+  labelColumn.counterAxisAlignItems = "MAX";
+  labelColumn.x = Math.max(
+    0,
+    padding.left - AXIS_TICK_LABEL_WIDTH - LABEL_TO_CHART_GAP,
+  );
+
+  for (let index = steps; index >= 0; index -= 1) {
+    const value = (niceMax / steps) * index;
+    const axisLabelValue =
+      payload.type === "line"
+        ? formatAxisTickCompact(value, payload)
+        : formatChartValue(value, getValueFormatterConfig(payload));
+    const tickLabel = createAutoLayoutFrame(
+      `Y tick label ${steps - index + 1}`,
+      0,
+      0,
+      "HORIZONTAL",
+      0,
+      "AUTO",
+      "AUTO",
+    );
+    tickLabel.counterAxisAlignItems = "CENTER";
+    tickLabel.primaryAxisAlignItems = "MIN";
+    const tickText = createText(
+      axisLabelValue,
+      11,
+      FONT_REGULAR,
+      COLORS.mutedText,
+      0,
+      0,
+      1,
+      20,
+      "RIGHT",
+    );
+    tickText.textAlignHorizontal = "RIGHT";
+    tickLabel.appendChild(tickText);
+    labelColumn.appendChild(tickLabel);
+  }
+
+  frame.appendChild(labelColumn);
 }
 
 function drawXAxisCategoryLabels(
@@ -1967,6 +2015,23 @@ function createTransparentFrame(
   if (frame.resize) frame.resize(width, height);
   frame.fills = [];
   frame.clipsContent = false;
+  return frame;
+}
+
+function createAutoLayoutFrame(
+  name: string,
+  x: number,
+  y: number,
+  layoutMode: "HORIZONTAL" | "VERTICAL",
+  itemSpacing: number,
+  primaryAxisSizingMode: "FIXED" | "AUTO",
+  counterAxisSizingMode: "FIXED" | "AUTO",
+): FrameNode {
+  const frame = createTransparentFrame(name, x, y, 1, 1);
+  frame.layoutMode = layoutMode;
+  frame.itemSpacing = itemSpacing;
+  frame.primaryAxisSizingMode = primaryAxisSizingMode;
+  frame.counterAxisSizingMode = counterAxisSizingMode;
   return frame;
 }
 
