@@ -113,6 +113,14 @@ declare const __html__: string;
 const FONT_REGULAR: FontName = { family: "Forever Forma", style: "Regular" };
 const FONT_MEDIUM: FontName = { family: "Forever Forma", style: "Medium" };
 const FONT_BOLD: FontName = { family: "Forever Forma", style: "Bold" };
+const FALLBACK_REGULAR: FontName = { family: "Inter", style: "Regular" };
+const FALLBACK_MEDIUM: FontName = { family: "Inter", style: "Medium" };
+const FALLBACK_BOLD: FontName = { family: "Inter", style: "Bold" };
+const FALLBACK_SYSTEM: FontName = { family: "Roboto", style: "Regular" };
+
+let ACTIVE_FONT_REGULAR: FontName = FONT_REGULAR;
+let ACTIVE_FONT_MEDIUM: FontName = FONT_MEDIUM;
+let ACTIVE_FONT_BOLD: FontName = FONT_BOLD;
 const FONT_AXLE_FALLBACK: FontName = {
   family: "Forever Forma Heading",
   style: "Regular",
@@ -268,11 +276,7 @@ figma.ui.onmessage = async (message) => {
       return;
     }
 
-    await Promise.all([
-      figma.loadFontAsync(FONT_REGULAR),
-      figma.loadFontAsync(FONT_MEDIUM),
-      figma.loadFontAsync(FONT_BOLD),
-    ]);
+    await preloadChartFonts();
 
     chart = await createEditableChart(message.payload);
     figma.currentPage.appendChild(chart);
@@ -284,6 +288,10 @@ figma.ui.onmessage = async (message) => {
     figma.ui.postMessage({ type: "chart-created" });
   } catch (error) {
     if (chart?.remove) chart.remove();
+    globalThis.console?.error("Chart creation failed", error);
+    if (error instanceof Error && error.stack) {
+      globalThis.console?.error(error.stack);
+    }
     const messageText =
       error instanceof Error
         ? `Could not create ${getChartTypeLabel(message.payload.type)} chart: ${error.message}`
@@ -293,6 +301,66 @@ figma.ui.onmessage = async (message) => {
   }
 };
 
+async function tryLoadFont(font: FontName): Promise<boolean> {
+  try {
+    await figma.loadFontAsync(font);
+    return true;
+  } catch (error) {
+    globalThis.console?.warn(
+      `Unable to load font ${font.family} ${font.style}.`,
+      error,
+    );
+    return false;
+  }
+}
+
+async function resolveFont(
+  primary: FontName,
+  fallbacks: FontName[],
+): Promise<FontName> {
+  if (await tryLoadFont(primary)) return primary;
+  for (const fallback of fallbacks) {
+    if (await tryLoadFont(fallback)) return fallback;
+  }
+  return primary;
+}
+
+async function preloadChartFonts(): Promise<void> {
+  ACTIVE_FONT_REGULAR = await resolveFont(FONT_REGULAR, [
+    FALLBACK_REGULAR,
+    FALLBACK_SYSTEM,
+  ]);
+  ACTIVE_FONT_MEDIUM = await resolveFont(FONT_MEDIUM, [
+    ACTIVE_FONT_REGULAR,
+    FALLBACK_MEDIUM,
+    FALLBACK_SYSTEM,
+  ]);
+  ACTIVE_FONT_BOLD = await resolveFont(FONT_BOLD, [
+    ACTIVE_FONT_MEDIUM,
+    ACTIVE_FONT_REGULAR,
+    FALLBACK_BOLD,
+    FALLBACK_SYSTEM,
+  ]);
+}
+
+function resolveActiveFont(fontName: FontName): FontName {
+  if (
+    fontName.family === FONT_MEDIUM.family &&
+    fontName.style === FONT_MEDIUM.style
+  )
+    return ACTIVE_FONT_MEDIUM;
+  if (
+    fontName.family === FONT_BOLD.family &&
+    fontName.style === FONT_BOLD.style
+  )
+    return ACTIVE_FONT_BOLD;
+  if (
+    fontName.family === FONT_REGULAR.family &&
+    fontName.style === FONT_REGULAR.style
+  )
+    return ACTIVE_FONT_REGULAR;
+  return fontName;
+}
 function validatePayload(
   payload: ChartPayload,
 ): { valid: true } | { valid: false; message: string } {
@@ -405,10 +473,20 @@ function createChartLayout(payload: ChartPayload): ChartLayout {
       yAxisTickLabelGutterWidth +
       yAxisTickGap,
   };
-  const plotWidth = Math.max(
-    GRID * 10,
-    contentWidth - cartesianPadding.left - cartesianPadding.right,
-  );
+  const rawPlotWidth =
+    contentWidth - cartesianPadding.left - cartesianPadding.right;
+  const plotWidth = Number.isFinite(rawPlotWidth)
+    ? Math.max(GRID * 10, rawPlotWidth)
+    : GRID * 10;
+  if (!Number.isFinite(rawPlotWidth) || rawPlotWidth < GRID * 10) {
+    globalThis.console?.warn(
+      "Invalid plot width computed; using safe fallback.",
+      {
+        rawPlotWidth,
+        fallbackPlotWidth: plotWidth,
+      },
+    );
+  }
   const plotHeight = Math.max(
     GRID * 6,
     contentHeight - cartesianPadding.top - cartesianPadding.bottom,
@@ -2251,7 +2329,7 @@ function createText(
   text.x = x;
   text.y = y;
   if (text.resize) text.resize(width, height);
-  text.fontName = fontName;
+  text.fontName = resolveActiveFont(fontName);
   text.fontSize = fontSize;
   text.lineHeight = { unit: "PIXELS", value: lineHeight };
   text.characters = characters;
@@ -2295,7 +2373,7 @@ async function applyChartTitleTextStyle(
         "Unable to load fallback font Forever Forma Heading. Falling back to Forever Forma Regular.",
         error,
       );
-      titleNode.fontName = FONT_REGULAR;
+      titleNode.fontName = resolveActiveFont(FONT_REGULAR);
     }
     titleNode.fontSize = fallbackTypography.fontSize;
     titleNode.lineHeight = {
