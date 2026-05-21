@@ -1467,12 +1467,9 @@ function drawXAxisCategoryLabels(
     ).textAutoResize = "WIDTH_AND_HEIGHT";
     tickText.textAlignHorizontal = "CENTER";
     tickLabel.appendChild(tickText);
+    xAxisTickLabels.appendChild(tickLabel);
     if (rowIndex === 0 || rowIndex === rows.length - 1) {
-      (
-        tickLabel as FrameNode & {
-          layoutPositioning: "AUTO" | "ABSOLUTE";
-        }
-      ).layoutPositioning = "ABSOLUTE";
+      setAbsoluteIfAllowed(tickLabel);
       const centerX = (plotWidth * rowIndex) / denominator;
       tickLabel.x = Math.max(
         0,
@@ -1485,7 +1482,6 @@ function drawXAxisCategoryLabels(
     } else {
       (tickLabel as FrameNode & { layoutGrow: number }).layoutGrow = 1;
     }
-    xAxisTickLabels.appendChild(tickLabel);
   });
   frame.appendChild(xAxisTickLabels);
   return xAxisTickLabels;
@@ -2169,6 +2165,15 @@ function createAutoLayoutFrame(
   frame.primaryAxisSizingMode = primaryAxisSizingMode;
   frame.counterAxisSizingMode = counterAxisSizingMode;
   return frame;
+}
+
+function setAbsoluteIfAllowed(node: SceneNode): void {
+  const parent = (node as SceneNode & { parent: SceneNode | null }).parent;
+  if (parent && "layoutMode" in parent && parent.layoutMode !== "NONE") {
+    (
+      node as SceneNode & { layoutPositioning: "AUTO" | "ABSOLUTE" }
+    ).layoutPositioning = "ABSOLUTE";
+  }
 }
 
 function createRectangle(
