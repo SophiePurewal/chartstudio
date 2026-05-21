@@ -694,6 +694,9 @@ function getValueFormatterConfig(payload: ChartPayload) {
 async function createEditableLineChart(
   payload: ChartPayload,
 ): Promise<FrameNode> {
+  globalThis.console?.log(
+    "Creating line chart using updated renderer v2 (createEditableLineChart)",
+  );
   const layout = createChartLayout(payload);
   const { padding, plotWidth, plotHeight } = layout.cartesian;
   const height = layout.contentHeight;
@@ -1429,6 +1432,7 @@ function drawLegend(
         colors[index % colors.length],
         Math.max(1, getFiniteNumber(payload.lineWeight, 1)),
         lineStyle,
+        payload.showPoints,
       );
     } else {
       itemFrame.appendChild(
@@ -1499,14 +1503,27 @@ function appendLegendLineSwatch(
     double?: boolean;
     strokeCap: "NONE" | "ROUND" | "SQUARE";
   },
+  hasPointMarker: boolean,
 ) {
-  if (lineStyle.double) {
-    const offset = lineWeight / 2 + 0.5;
+  const markerRadius = Math.max(1, lineWeight + 1);
+  const markerGap = hasPointMarker ? markerRadius + 1 : 0;
+  const lineStart = 0;
+  const lineEnd = 14;
+  const markerCenter = 7;
+  const leftEnd = Math.max(lineStart, markerCenter - markerGap);
+  const rightStart = Math.min(lineEnd, markerCenter + markerGap);
+  const appendSegment = (
+    name: string,
+    y: number,
+    fromX: number,
+    toX: number,
+  ) => {
+    if (toX <= fromX) return;
     itemFrame.appendChild(
       withConstraints(
         createVectorPath(
-          `Legend line upper · ${seriesName}`,
-          `M 0 ${formatCoordinate(swatchY - offset)} L 14 ${formatCoordinate(swatchY - offset)}`,
+          name,
+          `M ${formatCoordinate(fromX)} ${formatCoordinate(y)} L ${formatCoordinate(toX)} ${formatCoordinate(y)}`,
           color,
           lineWeight,
           lineStyle,
@@ -1515,33 +1532,47 @@ function appendLegendLineSwatch(
         "CENTER",
       ),
     );
-    itemFrame.appendChild(
-      withConstraints(
-        createVectorPath(
-          `Legend line lower · ${seriesName}`,
-          `M 0 ${formatCoordinate(swatchY + offset)} L 14 ${formatCoordinate(swatchY + offset)}`,
-          color,
-          lineWeight,
-          lineStyle,
-        ),
-        "MIN",
-        "CENTER",
-      ),
+  };
+
+  if (lineStyle.double) {
+    const offset = lineWeight / 2 + 0.5;
+    appendSegment(
+      `Legend line upper left · ${seriesName}`,
+      swatchY - offset,
+      lineStart,
+      leftEnd,
+    );
+    appendSegment(
+      `Legend line upper right · ${seriesName}`,
+      swatchY - offset,
+      rightStart,
+      lineEnd,
+    );
+    appendSegment(
+      `Legend line lower left · ${seriesName}`,
+      swatchY + offset,
+      lineStart,
+      leftEnd,
+    );
+    appendSegment(
+      `Legend line lower right · ${seriesName}`,
+      swatchY + offset,
+      rightStart,
+      lineEnd,
     );
     return;
   }
-  itemFrame.appendChild(
-    withConstraints(
-      createVectorPath(
-        `Legend line · ${seriesName}`,
-        `M 0 ${formatCoordinate(swatchY)} L 14 ${formatCoordinate(swatchY)}`,
-        color,
-        lineWeight,
-        lineStyle,
-      ),
-      "MIN",
-      "CENTER",
-    ),
+  appendSegment(
+    `Legend line left · ${seriesName}`,
+    swatchY,
+    lineStart,
+    leftEnd,
+  );
+  appendSegment(
+    `Legend line right · ${seriesName}`,
+    swatchY,
+    rightStart,
+    lineEnd,
   );
 }
 
@@ -1556,6 +1587,7 @@ function createLineLegendSwatch(
     double?: boolean;
     strokeCap: "NONE" | "ROUND" | "SQUARE";
   },
+  hasPointMarker: boolean,
 ) {
   appendLegendLineSwatch(
     itemFrame,
@@ -1564,16 +1596,17 @@ function createLineLegendSwatch(
     color,
     lineWeight,
     lineStyle,
+    hasPointMarker,
   );
 }
 
 function getYAxisTitleXPosition(yAxisX: number): number {
-  const tickLabelRightEdge = AXIS_TICK_LABEL_X + AXIS_TICK_LABEL_WIDTH;
-  const titleCenterX = Math.max(
-    TEXT_STYLES.axisTitle.lineHeight / 2,
-    yAxisX - (yAxisX - tickLabelRightEdge) / 2 - Y_AXIS_TITLE_GAP,
+  const tickLabelLeftEdge = AXIS_TICK_LABEL_X;
+  const titleWidthAfterRotation = TEXT_STYLES.axisTitle.lineHeight;
+  return Math.max(
+    0,
+    tickLabelLeftEdge - Y_AXIS_TITLE_GAP - titleWidthAfterRotation,
   );
-  return titleCenterX - TEXT_STYLES.axisTitle.lineHeight / 2;
 }
 
 function positionYAxisTitle({
