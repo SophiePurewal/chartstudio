@@ -851,23 +851,121 @@ async function createEditableLineChart(
       }
     }
 
-    drawYAxisTickLabels(chartBodyFrame, payload, padding, plotHeight, niceMax);
+    const yAxisFrame = withConstraints(
+      createAutoLayoutFrame(
+        "Y Axis",
+        0,
+        padding.top,
+        "HORIZONTAL",
+        LABEL_TO_CHART_GAP,
+        "AUTO",
+        "AUTO",
+      ),
+      "MIN",
+      "MIN",
+    );
+    yAxisFrame.primaryAxisAlignItems = "MIN";
+    yAxisFrame.counterAxisAlignItems = "CENTER";
+    if (payload.yLabel) {
+      const yAxisLabel = createAutoLayoutFrame(
+        "Y axis label",
+        0,
+        0,
+        "VERTICAL",
+        0,
+        "AUTO",
+        "AUTO",
+      );
+      yAxisLabel.primaryAxisAlignItems = "CENTER";
+      yAxisLabel.counterAxisAlignItems = "CENTER";
+      const yAxisLabelText = createText(
+        payload.yLabel,
+        TEXT_STYLES.axisTitle.fontSize,
+        TEXT_STYLES.axisTitle.font,
+        COLORS.text,
+        0,
+        0,
+        1,
+        TEXT_STYLES.axisTitle.lineHeight,
+        "CENTER",
+      );
+      (
+        yAxisLabelText as TextNode & { textAutoResize?: "WIDTH_AND_HEIGHT" }
+      ).textAutoResize = "WIDTH_AND_HEIGHT";
+      yAxisLabelText.rotation = -90;
+      yAxisLabel.appendChild(yAxisLabelText);
+      yAxisFrame.appendChild(yAxisLabel);
+    }
+    const yAxisTickLabels = drawYAxisTickLabels(
+      yAxisFrame,
+      payload,
+      { top: 0, left: 0, right: 0, bottom: 0 },
+      plotHeight,
+      niceMax,
+    );
+    if (yAxisTickLabels) {
+      yAxisTickLabels.x = 0;
+      yAxisTickLabels.y = 0;
+    }
+    chartBodyFrame.appendChild(yAxisFrame);
+
+    chartAreaFrame.x =
+      (yAxisFrame as FrameNode & { width: number }).width + LABEL_TO_CHART_GAP;
+    chartAreaFrame.y = padding.top;
+
+    const xAxisFrame = withConstraints(
+      createAutoLayoutFrame(
+        "X Axis",
+        chartAreaFrame.x,
+        chartAreaFrame.y + plotHeight + LABEL_TO_CHART_GAP,
+        "VERTICAL",
+        LABEL_TO_CHART_GAP,
+        "AUTO",
+        "AUTO",
+      ),
+      "MIN",
+      "MIN",
+    );
+    xAxisFrame.primaryAxisAlignItems = "MIN";
+    xAxisFrame.counterAxisAlignItems = "CENTER";
     drawXAxisCategoryLabels(
-      chartBodyFrame,
+      xAxisFrame,
       payload,
       rows,
-      padding,
+      { top: 0, left: 0, right: 0, bottom: 0 },
       plotWidth,
-      plotHeight,
+      0,
     );
-    drawAxisLabels(
-      chartBodyFrame,
-      payload,
-      padding,
-      plotWidth,
-      plotHeight,
-      layout,
-    );
+    if (payload.xLabel) {
+      const xAxisLabel = createAutoLayoutFrame(
+        "X axis label",
+        0,
+        0,
+        "HORIZONTAL",
+        0,
+        "AUTO",
+        "AUTO",
+      );
+      xAxisLabel.primaryAxisAlignItems = "CENTER";
+      xAxisLabel.counterAxisAlignItems = "CENTER";
+      const xAxisLabelText = createText(
+        payload.xLabel,
+        TEXT_STYLES.axisTitle.fontSize,
+        TEXT_STYLES.axisTitle.font,
+        COLORS.text,
+        0,
+        0,
+        1,
+        TEXT_STYLES.axisTitle.lineHeight,
+        "CENTER",
+      );
+      (
+        xAxisLabelText as TextNode & { textAutoResize?: "WIDTH_AND_HEIGHT" }
+      ).textAutoResize = "WIDTH_AND_HEIGHT";
+      xAxisLabel.appendChild(xAxisLabelText);
+      xAxisFrame.appendChild(xAxisLabel);
+    }
+    chartBodyFrame.appendChild(xAxisFrame);
 
     if (payload.showLegend && seriesCount > 1) {
       const legendSection = createChartSectionFrame(
@@ -1312,6 +1410,7 @@ function drawYAxisTickLabels(
     padding.left - labelColumnWidth - LABEL_TO_CHART_GAP,
   );
   frame.appendChild(labelColumn);
+  return labelColumn;
 }
 
 function drawXAxisCategoryLabels(
@@ -1323,31 +1422,73 @@ function drawXAxisCategoryLabels(
   plotHeight: number,
 ) {
   if (!payload.showAxisLabels) return;
+  const xAxisTickLabels = withConstraints(
+    createAutoLayoutFrame(
+      "X axis tick labels",
+      padding.left,
+      padding.top + plotHeight + LABEL_TO_CHART_GAP,
+      "HORIZONTAL",
+      0,
+      "AUTO",
+      "AUTO",
+    ),
+    "MIN",
+    "MIN",
+  );
+  xAxisTickLabels.counterAxisAlignItems = "MIN";
+  xAxisTickLabels.primaryAxisAlignItems = "SPACE_BETWEEN";
+  if (xAxisTickLabels.resize) xAxisTickLabels.resize(plotWidth, 1);
   const denominator = Math.max(rows.length - 1, 1);
-  const labelWidth = 72;
   rows.forEach((row, rowIndex) => {
-    const centerX = padding.left + (plotWidth * rowIndex) / denominator;
-    const minX = padding.left - labelWidth / 2;
-    const maxX = padding.left + plotWidth - labelWidth / 2;
-    const x = Math.max(minX, Math.min(maxX, centerX - labelWidth / 2));
-    frame.appendChild(
-      withConstraints(
-        createText(
-          row.label,
-          11,
-          FONT_REGULAR,
-          COLORS.mutedText,
-          x,
-          padding.top + plotHeight + 10,
-          labelWidth,
-          18,
-          "CENTER",
-        ),
-        "SCALE",
-        "SCALE",
-      ),
+    const tickLabel = createAutoLayoutFrame(
+      `X tick label ${rowIndex + 1}`,
+      0,
+      0,
+      "HORIZONTAL",
+      0,
+      "AUTO",
+      "AUTO",
     );
+    tickLabel.counterAxisAlignItems = "CENTER";
+    tickLabel.primaryAxisAlignItems = "CENTER";
+    const tickText = createText(
+      row.label,
+      11,
+      FONT_REGULAR,
+      COLORS.mutedText,
+      0,
+      0,
+      1,
+      18,
+      "CENTER",
+    );
+    (
+      tickText as TextNode & { textAutoResize?: "WIDTH_AND_HEIGHT" }
+    ).textAutoResize = "WIDTH_AND_HEIGHT";
+    tickText.textAlignHorizontal = "CENTER";
+    tickLabel.appendChild(tickText);
+    if (rowIndex === 0 || rowIndex === rows.length - 1) {
+      (
+        tickLabel as FrameNode & {
+          layoutPositioning: "AUTO" | "ABSOLUTE";
+        }
+      ).layoutPositioning = "ABSOLUTE";
+      const centerX = (plotWidth * rowIndex) / denominator;
+      tickLabel.x = Math.max(
+        0,
+        Math.min(
+          plotWidth - (tickLabel as FrameNode & { width: number }).width,
+          centerX - (tickLabel as FrameNode & { width: number }).width / 2,
+        ),
+      );
+      tickLabel.y = 0;
+    } else {
+      (tickLabel as FrameNode & { layoutGrow: number }).layoutGrow = 1;
+    }
+    xAxisTickLabels.appendChild(tickLabel);
   });
+  frame.appendChild(xAxisTickLabels);
+  return xAxisTickLabels;
 }
 
 function drawAxisLabels(
