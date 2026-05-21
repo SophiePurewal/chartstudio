@@ -695,7 +695,7 @@ async function createEditableLineChart(
   payload: ChartPayload,
 ): Promise<FrameNode> {
   globalThis.console?.log(
-    "Creating line chart using updated renderer v2 (createEditableLineChart)",
+    "Creating line chart using updated renderer v3 (createEditableLineChart)",
   );
   const layout = createChartLayout(payload);
   const { padding, plotWidth, plotHeight } = layout.cartesian;
@@ -715,8 +715,8 @@ async function createEditableLineChart(
     layout,
   );
   frame.name = payload.title
-    ? `ChartStudio Line Chart · ${payload.title}`
-    : "ChartStudio Line Chart";
+    ? `ChartStudio Line Chart - UPDATED RENDERER v3 · ${payload.title}`
+    : "ChartStudio Line Chart - UPDATED RENDERER v3";
 
   try {
     const chartAreaFrame = createChartSectionFrame(
