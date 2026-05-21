@@ -206,8 +206,9 @@ const CHART_FRAME_PADDING = 8;
 const DESKTOP_SECTION_SPACING = 48;
 const COMPACT_SECTION_SPACING = 16;
 const AXIS_TICK_LABEL_WIDTH = 58;
-const AXIS_TICK_LABEL_X = 20;
+const AXIS_TICK_LABEL_GUTTER_MIN = 64;
 const Y_AXIS_TITLE_GAP = 12;
+const Y_AXIS_TITLE_GUTTER_MIN = 22;
 const GRID = 8;
 const MOBILE_CUSTOM_WIDTH_MAX = 480;
 const AXLE_TITLE_STYLES = {
@@ -225,6 +226,8 @@ type ChartLayout = {
   contentFrameHeight: number;
   cartesian: {
     padding: { top: number; left: number; bottom: number; right: number };
+    yAxisTitleGutterWidth: number;
+    yAxisTickLabelGutterWidth: number;
     plotWidth: number;
     plotHeight: number;
     legendHeight: number;
@@ -378,17 +381,20 @@ function createChartLayout(payload: ChartPayload): ChartLayout {
   const hasLegend = payload.showLegend;
   const axisTickLabelBand = payload.showAxisLabels ? 28 : 0;
   const xAxisTitleBand = payload.xLabel ? 36 : 0;
+  const yAxisTitleGutterWidth = payload.yLabel
+    ? Math.max(
+        Y_AXIS_TITLE_GUTTER_MIN,
+        TEXT_STYLES.axisTitle.lineHeight + Y_AXIS_TITLE_GAP,
+      )
+    : 0;
+  const yAxisTickLabelGutterWidth = payload.showAxisLabels
+    ? AXIS_TICK_LABEL_GUTTER_MIN
+    : 0;
   const cartesianPadding = {
     top: payload.showAxisLabels ? 8 : 0,
     right: compact ? 16 : 36,
     bottom: axisTickLabelBand + xAxisTitleBand + 4,
-    left: payload.yLabel
-      ? compact
-        ? 72
-        : 86
-      : payload.showAxisLabels
-        ? 64
-        : 40,
+    left: 40 + yAxisTitleGutterWidth + yAxisTickLabelGutterWidth,
   };
   const plotWidth = Math.max(
     GRID * 10,
@@ -490,6 +496,8 @@ function createChartLayout(payload: ChartPayload): ChartLayout {
     contentFrameHeight,
     cartesian: {
       padding: cartesianPadding,
+      yAxisTitleGutterWidth,
+      yAxisTickLabelGutterWidth,
       plotWidth,
       plotHeight,
       legendHeight,
@@ -671,7 +679,7 @@ async function createEditableBarChart(
     niceMax,
     seriesCount,
   );
-  drawAxisLabels(labelsFrame, payload, padding, plotWidth, plotHeight);
+  drawAxisLabels(labelsFrame, payload, padding, plotWidth, plotHeight, layout);
 
   if (payload.showLegend && seriesCount > 1) {
     const legendSection = createChartSectionFrame(
@@ -851,7 +859,14 @@ async function createEditableLineChart(
       plotWidth,
       plotHeight,
     );
-    drawAxisLabels(labelsFrame, payload, padding, plotWidth, plotHeight);
+    drawAxisLabels(
+      labelsFrame,
+      payload,
+      padding,
+      plotWidth,
+      plotHeight,
+      layout,
+    );
 
     if (payload.showLegend && seriesCount > 1) {
       const legendSection = createChartSectionFrame(
@@ -1060,9 +1075,9 @@ function drawGridAndAxes(
             11,
             FONT_REGULAR,
             COLORS.mutedText,
-            20,
+            Math.max(0, padding.left - AXIS_TICK_LABEL_WIDTH),
             y - 8,
-            58,
+            AXIS_TICK_LABEL_WIDTH,
             20,
             "RIGHT",
           ),
@@ -1293,6 +1308,7 @@ function drawAxisLabels(
   padding: { top: number; left: number; bottom: number; right: number },
   plotWidth: number,
   plotHeight: number,
+  layout: ChartLayout,
 ) {
   if (payload.xLabel) {
     const xLabelArea = withConstraints(
@@ -1327,14 +1343,22 @@ function drawAxisLabels(
   }
 
   if (payload.yLabel) {
-    const yAxisX = padding.left;
     const plotTop = padding.top;
+    const plotCenterY = plotTop + plotHeight / 2;
     const yAxisTitleHeight = TEXT_STYLES.axisTitle.lineHeight;
     const yAxisTitleWidth = plotHeight;
+    const yAxisTickLabelGutterX = Math.max(
+      0,
+      padding.left - layout.cartesian.yAxisTickLabelGutterWidth,
+    );
+    const yAxisTitleGutterX = Math.max(
+      0,
+      yAxisTickLabelGutterX - layout.cartesian.yAxisTitleGutterWidth,
+    );
     const yAxisTitlePosition = positionYAxisTitle({
-      plotTop,
-      plotHeight,
-      yAxisX,
+      plotCenterY,
+      yAxisTitleGutterX,
+      yAxisTickLabelGutterX,
       yAxisTitleWidth,
       yAxisTitleHeight,
     });
@@ -1600,31 +1624,31 @@ function createLineLegendSwatch(
   );
 }
 
-function getYAxisTitleXPosition(yAxisX: number): number {
-  const tickLabelLeftEdge = AXIS_TICK_LABEL_X;
+function getYAxisTitleXPosition(
+  yAxisTitleGutterX: number,
+  yAxisTickLabelGutterX: number,
+): number {
   const titleWidthAfterRotation = TEXT_STYLES.axisTitle.lineHeight;
-  return Math.max(
-    0,
-    tickLabelLeftEdge - Y_AXIS_TITLE_GAP - titleWidthAfterRotation,
-  );
+  const titleRightEdge = yAxisTickLabelGutterX - Y_AXIS_TITLE_GAP;
+  return Math.max(yAxisTitleGutterX, titleRightEdge - titleWidthAfterRotation);
 }
 
 function positionYAxisTitle({
-  plotTop,
-  plotHeight,
-  yAxisX,
+  plotCenterY,
+  yAxisTitleGutterX,
+  yAxisTickLabelGutterX,
   yAxisTitleWidth,
   yAxisTitleHeight,
 }: {
-  plotTop: number;
-  plotHeight: number;
-  yAxisX: number;
+  plotCenterY: number;
+  yAxisTitleGutterX: number;
+  yAxisTickLabelGutterX: number;
   yAxisTitleWidth: number;
   yAxisTitleHeight: number;
 }): { x: number; y: number } {
-  const y = plotTop + (plotHeight - yAxisTitleHeight) / 2 - plotTop;
+  const y = plotCenterY - yAxisTitleHeight / 2;
   return {
-    x: getYAxisTitleXPosition(yAxisX),
+    x: getYAxisTitleXPosition(yAxisTitleGutterX, yAxisTickLabelGutterX),
     y,
   };
 }
@@ -1639,7 +1663,7 @@ function formatAxisTickCompact(value: number, payload: ChartPayload): string {
   }
   const thousandsValue = Math.round((rounded / 1000) * 10) / 10;
   const compact = Number.isInteger(thousandsValue)
-    ? `${thousandsValue}`
+    ? `${Math.trunc(thousandsValue)}`
     : `${thousandsValue}`;
   if (payload.numberFormat === "currency") return `£${compact}k`;
   return `${compact}k`;
