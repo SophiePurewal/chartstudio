@@ -206,6 +206,9 @@ const CHART_FRAME_PADDING = 8;
 const DESKTOP_SECTION_SPACING = 48;
 const LINE_SECTION_SPACING = 32;
 const COMPACT_SECTION_SPACING = 16;
+const AXIS_TICK_LABEL_WIDTH = 58;
+const AXIS_TICK_LABEL_X = 20;
+const Y_AXIS_TITLE_GAP = 12;
 const GRID = 8;
 const MOBILE_CUSTOM_WIDTH_MAX = 480;
 const AXLE_TITLE_STYLES = {
@@ -508,13 +511,7 @@ function createChartLayout(payload: ChartPayload): ChartLayout {
 function getChartSectionSpacing(payload: ChartPayload): number {
   const resolved = resolveChartSize(payload.chartSize);
   if (payload.type === "line") {
-    if (resolved.preset === "mobile-4") return COMPACT_SECTION_SPACING;
-    if (resolved.preset === "custom") {
-      return resolved.width > MOBILE_CUSTOM_WIDTH_MAX
-        ? LINE_SECTION_SPACING
-        : COMPACT_SECTION_SPACING;
-    }
-    return LINE_SECTION_SPACING;
+    return COMPACT_SECTION_SPACING;
   }
   if (resolved.preset === "tablet-12" || resolved.preset === "mobile-4") {
     return COMPACT_SECTION_SPACING;
@@ -1046,10 +1043,14 @@ function drawGridAndAxes(
       );
     }
     if (payload.showAxisLabels) {
+      const axisLabelValue =
+        payload.type === "line"
+          ? formatLineYAxisTickValue(value, payload)
+          : formatChartValue(value, getValueFormatterConfig(payload));
       frame.appendChild(
         withConstraints(
           createText(
-            formatChartValue(value, getValueFormatterConfig(payload)),
+            axisLabelValue,
             11,
             FONT_REGULAR,
             COLORS.mutedText,
@@ -1320,7 +1321,7 @@ function drawAxisLabels(
   }
 
   if (payload.yLabel) {
-    const yLabelAreaWidth = Math.max(32, padding.left - 38);
+    const yLabelAreaWidth = Math.max(32, padding.left);
     const yLabelArea = withConstraints(
       createTransparentFrame(
         "Y axis label area",
@@ -1338,7 +1339,7 @@ function drawAxisLabels(
         TEXT_STYLES.axisTitle.fontSize,
         TEXT_STYLES.axisTitle.font,
         COLORS.text,
-        (yLabelAreaWidth - TEXT_STYLES.axisTitle.lineHeight) / 2,
+        getYAxisTitleXPosition(padding.left),
         (plotHeight - TEXT_STYLES.axisTitle.lineHeight) / 2,
         plotHeight,
         TEXT_STYLES.axisTitle.lineHeight,
@@ -1407,18 +1408,13 @@ function drawLegend(
         index,
         payload.seriesNames.length,
       );
-      itemFrame.appendChild(
-        withConstraints(
-          createVectorPath(
-            `Legend line · ${name}`,
-            `M 0 ${formatCoordinate(swatchY)} L 14 ${formatCoordinate(swatchY)}`,
-            colors[index % colors.length],
-            Math.max(1, getFiniteNumber(payload.lineWeight, 1)),
-            lineStyle,
-          ),
-          "MIN",
-          "CENTER",
-        ),
+      appendLegendLineSwatch(
+        itemFrame,
+        name,
+        swatchY,
+        colors[index % colors.length],
+        Math.max(1, getFiniteNumber(payload.lineWeight, 1)),
+        lineStyle,
       );
     } else {
       itemFrame.appendChild(
@@ -1476,6 +1472,91 @@ function drawLegend(
   });
   legendFrame.appendChild(itemsFrame);
   frame.appendChild(legendFrame);
+}
+
+function appendLegendLineSwatch(
+  itemFrame: FrameNode,
+  seriesName: string,
+  swatchY: number,
+  color: RGB,
+  lineWeight: number,
+  lineStyle: {
+    dashPattern?: number[];
+    double?: boolean;
+    strokeCap: "NONE" | "ROUND" | "SQUARE";
+  },
+) {
+  if (lineStyle.double) {
+    const offset = lineWeight / 2 + 0.5;
+    itemFrame.appendChild(
+      withConstraints(
+        createVectorPath(
+          `Legend line upper · ${seriesName}`,
+          `M 0 ${formatCoordinate(swatchY - offset)} L 14 ${formatCoordinate(swatchY - offset)}`,
+          color,
+          lineWeight,
+          lineStyle,
+        ),
+        "MIN",
+        "CENTER",
+      ),
+    );
+    itemFrame.appendChild(
+      withConstraints(
+        createVectorPath(
+          `Legend line lower · ${seriesName}`,
+          `M 0 ${formatCoordinate(swatchY + offset)} L 14 ${formatCoordinate(swatchY + offset)}`,
+          color,
+          lineWeight,
+          lineStyle,
+        ),
+        "MIN",
+        "CENTER",
+      ),
+    );
+    return;
+  }
+  itemFrame.appendChild(
+    withConstraints(
+      createVectorPath(
+        `Legend line · ${seriesName}`,
+        `M 0 ${formatCoordinate(swatchY)} L 14 ${formatCoordinate(swatchY)}`,
+        color,
+        lineWeight,
+        lineStyle,
+      ),
+      "MIN",
+      "CENTER",
+    ),
+  );
+}
+
+function getYAxisTitleXPosition(yAxisX: number): number {
+  const tickLabelRightEdge = AXIS_TICK_LABEL_X + AXIS_TICK_LABEL_WIDTH;
+  const titleCenterX = Math.max(
+    TEXT_STYLES.axisTitle.lineHeight / 2,
+    yAxisX - (yAxisX - tickLabelRightEdge) / 2 - Y_AXIS_TITLE_GAP,
+  );
+  return titleCenterX - TEXT_STYLES.axisTitle.lineHeight / 2;
+}
+
+function formatLineYAxisTickValue(
+  value: number,
+  payload: ChartPayload,
+): string {
+  if (payload.numberFormat === "percent") {
+    return formatChartValue(value, getValueFormatterConfig(payload));
+  }
+  const rounded = Math.round(value);
+  if (Math.abs(rounded) < 1000) {
+    return formatChartValue(rounded, getValueFormatterConfig(payload));
+  }
+  const thousandsValue = Math.round((rounded / 1000) * 10) / 10;
+  const compact = Number.isInteger(thousandsValue)
+    ? `${thousandsValue}`
+    : `${thousandsValue}`;
+  if (payload.numberFormat === "currency") return `£${compact}k`;
+  return `${compact}k`;
 }
 
 function drawDoughnutLegend(
