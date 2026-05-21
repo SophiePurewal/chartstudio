@@ -207,9 +207,8 @@ const MIN_CUSTOM_WIDTH = 320;
 const CHART_FRAME_PADDING = 8;
 const DESKTOP_SECTION_SPACING = 48;
 const COMPACT_SECTION_SPACING = 16;
-const AXIS_TICK_LABEL_WIDTH = 58;
 const AXIS_TICK_LABEL_GUTTER_MIN = 64;
-const Y_AXIS_TITLE_GAP = 12;
+const Y_AXIS_TITLE_GAP = 4;
 const LABEL_TO_CHART_GAP = 4;
 const Y_AXIS_TITLE_GUTTER_MIN = 22;
 const GRID = 8;
@@ -1268,12 +1267,7 @@ function drawYAxisTickLabels(
     "MIN",
   );
   labelColumn.primaryAxisAlignItems = "SPACE_BETWEEN";
-  if (labelColumn.resize) labelColumn.resize(AXIS_TICK_LABEL_WIDTH, plotHeight);
   labelColumn.counterAxisAlignItems = "MAX";
-  labelColumn.x = Math.max(
-    0,
-    padding.left - AXIS_TICK_LABEL_WIDTH - LABEL_TO_CHART_GAP,
-  );
 
   for (let index = steps; index >= 0; index -= 1) {
     const value = (niceMax / steps) * index;
@@ -1303,11 +1297,20 @@ function drawYAxisTickLabels(
       20,
       "RIGHT",
     );
+    (
+      tickText as TextNode & { textAutoResize?: "WIDTH_AND_HEIGHT" }
+    ).textAutoResize = "WIDTH_AND_HEIGHT";
     tickText.textAlignHorizontal = "RIGHT";
     tickLabel.appendChild(tickText);
     labelColumn.appendChild(tickLabel);
   }
 
+  const labelColumnWidth = (labelColumn as FrameNode & { width: number }).width;
+  if (labelColumn.resize) labelColumn.resize(labelColumnWidth, plotHeight);
+  labelColumn.x = Math.max(
+    0,
+    padding.left - labelColumnWidth - LABEL_TO_CHART_GAP,
+  );
   frame.appendChild(labelColumn);
 }
 
@@ -1357,16 +1360,20 @@ function drawAxisLabels(
 ) {
   if (payload.xLabel) {
     const xLabelArea = withConstraints(
-      createTransparentFrame(
+      createAutoLayoutFrame(
         "X axis label area",
         padding.left,
-        padding.top + plotHeight + 34,
-        plotWidth,
-        28,
+        padding.top + plotHeight + LABEL_TO_CHART_GAP,
+        "HORIZONTAL",
+        0,
+        "AUTO",
+        "AUTO",
       ),
-      "STRETCH",
+      "CENTER",
       "MAX",
     );
+    xLabelArea.primaryAxisAlignItems = "CENTER";
+    xLabelArea.counterAxisAlignItems = "CENTER";
     const xLabel = withConstraints(
       createText(
         payload.xLabel,
@@ -1374,14 +1381,17 @@ function drawAxisLabels(
         TEXT_STYLES.axisTitle.font,
         COLORS.text,
         0,
-        5,
-        plotWidth,
+        0,
+        1,
         TEXT_STYLES.axisTitle.lineHeight,
         "CENTER",
       ),
-      "STRETCH",
+      "MIN",
       "CENTER",
     );
+    (
+      xLabel as TextNode & { textAutoResize?: "WIDTH_AND_HEIGHT" }
+    ).textAutoResize = "WIDTH_AND_HEIGHT";
     xLabel.name = "X axis label";
     xLabelArea.appendChild(xLabel);
     frame.appendChild(xLabelArea);
