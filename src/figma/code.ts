@@ -110,9 +110,9 @@ type FigmaPluginApi = {
 declare const figma: FigmaPluginApi;
 declare const __html__: string;
 
-const FONT_REGULAR: FontName = { family: "Inter", style: "Regular" };
-const FONT_MEDIUM: FontName = { family: "Inter", style: "Medium" };
-const FONT_BOLD: FontName = { family: "Inter", style: "Bold" };
+const FONT_REGULAR: FontName = { family: "Forever Forma", style: "Regular" };
+const FONT_MEDIUM: FontName = { family: "Forever Forma", style: "Medium" };
+const FONT_BOLD: FontName = { family: "Forever Forma", style: "Bold" };
 const FONT_AXLE_FALLBACK: FontName = {
   family: "Forever Forma Heading",
   style: "Regular",
@@ -392,11 +392,18 @@ function createChartLayout(payload: ChartPayload): ChartLayout {
   const yAxisTickLabelGutterWidth = payload.showAxisLabels
     ? AXIS_TICK_LABEL_GUTTER_MIN
     : 0;
+  const yAxisTitleGap = payload.yLabel ? 4 : 0;
+  const yAxisTickGap = payload.showAxisLabels ? 4 : 0;
   const cartesianPadding = {
     top: payload.showAxisLabels ? 8 : 0,
-    right: compact ? 16 : 36,
+    right: compact ? 16 : 24,
     bottom: axisTickLabelBand + xAxisTitleBand + 4,
-    left: 40 + yAxisTitleGutterWidth + yAxisTickLabelGutterWidth,
+    left:
+      (compact ? 8 : 12) +
+      yAxisTitleGutterWidth +
+      yAxisTitleGap +
+      yAxisTickLabelGutterWidth +
+      yAxisTickGap,
   };
   const plotWidth = Math.max(
     GRID * 10,
@@ -444,10 +451,9 @@ function createChartLayout(payload: ChartPayload): ChartLayout {
   const combinedWidth = rightLegendAllowed
     ? squareSize + doughnutLabelInset * 2 + doughnutGap + doughnutLegendWidth
     : squareSize + doughnutLabelInset * 2;
-  const chartX = Math.max(
-    GRID,
-    (contentWidth - combinedWidth) / 2 + doughnutLabelInset,
-  );
+  const chartX = rightLegendAllowed
+    ? doughnutLabelInset
+    : Math.max(GRID, (contentWidth - combinedWidth) / 2 + doughnutLabelInset);
   const chartY = doughnutTop + doughnutLabelInset;
   const doughnutAreaHeight = rightLegendAllowed
     ? squareSize + doughnutLabelInset * 2
@@ -644,9 +650,7 @@ async function createEditableBarChart(
     "ChartStudio Bar Chart",
     layout,
   );
-  frame.name = payload.title
-    ? `ChartStudio Bar Chart · ${payload.title}`
-    : "ChartStudio Bar Chart";
+  frame.name = "ChartStudio Chart";
 
   const chartAreaFrame = createChartSectionFrame(
     "Chart Area",
@@ -705,9 +709,6 @@ function getValueFormatterConfig(payload: ChartPayload) {
 async function createEditableLineChart(
   payload: ChartPayload,
 ): Promise<FrameNode> {
-  globalThis.console?.log(
-    "Creating line chart using updated renderer v3 (createEditableLineChart)",
-  );
   const layout = createChartLayout(payload);
   const { padding, plotWidth, plotHeight } = layout.cartesian;
   const height = layout.contentHeight;
@@ -725,9 +726,7 @@ async function createEditableLineChart(
     "ChartStudio Line Chart",
     layout,
   );
-  frame.name = payload.title
-    ? `ChartStudio Line Chart - UPDATED RENDERER v3 · ${payload.title}`
-    : "ChartStudio Line Chart - UPDATED RENDERER v3";
+  frame.name = "ChartStudio Chart";
 
   try {
     const chartBodyFrame = createChartSectionFrame(
@@ -994,9 +993,7 @@ async function createEditableDoughnutChart(
     "ChartStudio Doughnut Chart",
     layout,
   );
-  frame.name = payload.title
-    ? `ChartStudio Doughnut Chart · ${payload.title}`
-    : "ChartStudio Doughnut Chart";
+  frame.name = "ChartStudio Chart";
 
   const colors = PALETTES[payload.palette].map(hexToRgb);
   const values = payload.rows.map((row) => ({
@@ -2295,7 +2292,7 @@ async function applyChartTitleTextStyle(
       titleNode.fontName = FONT_AXLE_FALLBACK;
     } catch (error) {
       globalThis.console?.warn(
-        "Unable to load fallback font Forever Forma Heading. Falling back to Inter Regular.",
+        "Unable to load fallback font Forever Forma Heading. Falling back to Forever Forma Regular.",
         error,
       );
       titleNode.fontName = FONT_REGULAR;
