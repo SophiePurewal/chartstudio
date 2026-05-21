@@ -441,7 +441,7 @@ function validateChartSize(
 
 function createChartLayout(payload: ChartPayload): ChartLayout {
   const size = resolveChartSize(payload.chartSize);
-  const contentWidth = size.width - CHART_FRAME_PADDING * 2;
+  const contentWidth = size.width;
   const compact = size.width <= 420;
   const sectionSpacing = getChartSectionSpacing(payload);
   const contentHeight = Math.max(
@@ -569,10 +569,7 @@ function createChartLayout(payload: ChartPayload): ChartLayout {
     labelsHeight +
     legendSectionHeight +
     Math.max(0, sectionCount - 1) * sectionSpacing;
-  const outerHeight = Math.max(
-    CHART_FRAME_PADDING * 2 + 1,
-    contentFrameHeight + CHART_FRAME_PADDING * 2,
-  );
+  const outerHeight = Math.max(1, contentFrameHeight);
 
   return {
     outerWidth: size.width,
@@ -622,12 +619,7 @@ function getLineChartLegendSpacing(): number {
 }
 
 function finalizeChartFrame(frame: FrameNode, layout: ChartLayout): void {
-  const finalHeight = Math.ceil(
-    Math.max(
-      CHART_FRAME_PADDING * 2 + 1,
-      layout.contentFrameHeight + CHART_FRAME_PADDING * 2,
-    ),
-  );
+  const finalHeight = Math.ceil(Math.max(1, layout.contentFrameHeight));
   if (frame.resize) frame.resize(layout.outerWidth, finalHeight);
 }
 
@@ -660,10 +652,10 @@ async function createBaseFrame(
 
   const contentFrame = figma.createFrame();
   contentFrame.name = "Chart content";
-  contentFrame.x = CHART_FRAME_PADDING;
-  contentFrame.y = CHART_FRAME_PADDING;
+  contentFrame.x = 0;
+  contentFrame.y = 0;
   if (contentFrame.resize) {
-    contentFrame.resize(layout.contentWidth, layout.contentFrameHeight);
+    contentFrame.resize(layout.outerWidth, layout.outerHeight);
   }
   contentFrame.fills = [];
   contentFrame.clipsContent = false;
@@ -788,7 +780,23 @@ async function createEditableLineChart(
   payload: ChartPayload,
 ): Promise<FrameNode> {
   const layout = createChartLayout(payload);
-  const { padding, plotWidth, plotHeight } = layout.cartesian;
+  const { padding, plotHeight } = layout.cartesian;
+  const chartBodyWidth = layout.contentWidth;
+  const yAxisLabelAreaWidth = payload.yLabel
+    ? layout.cartesian.yAxisTitleGutterWidth
+    : 0;
+  const yAxisTickLabelsWidth = payload.showAxisLabels
+    ? layout.cartesian.yAxisTickLabelGutterWidth
+    : 0;
+  const yAxisLabelGap = payload.yLabel ? LABEL_TO_CHART_GAP : 0;
+  const yAxisTicksGap = payload.showAxisLabels ? LABEL_TO_CHART_GAP : 0;
+  const calculatedPlotWidth =
+    chartBodyWidth -
+    yAxisLabelAreaWidth -
+    yAxisLabelGap -
+    yAxisTickLabelsWidth -
+    yAxisTicksGap;
+  const plotWidth = Math.max(GRID * 10, Math.floor(calculatedPlotWidth));
   const height = layout.contentHeight;
   const seriesCount = Math.max(1, payload.seriesNames.length);
   const rows = payload.rows.map((row) => ({
@@ -809,7 +817,7 @@ async function createEditableLineChart(
   try {
     const chartBodyFrame = createChartSectionFrame(
       "Chart Body",
-      layout.contentWidth,
+      chartBodyWidth,
       layout.cartesian.chartAreaHeight,
     );
     const chartAreaFrame = createTransparentFrame(
