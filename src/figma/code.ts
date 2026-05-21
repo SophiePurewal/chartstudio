@@ -731,25 +731,25 @@ async function createEditableLineChart(
     : "ChartStudio Line Chart - UPDATED RENDERER v3";
 
   try {
-    const chartAreaFrame = createChartSectionFrame(
-      "Chart Area",
+    const chartBodyFrame = createChartSectionFrame(
+      "Chart Body",
       layout.contentWidth,
       layout.cartesian.chartAreaHeight,
     );
-    const labelsFrame = createTransparentFrame(
-      "Labels",
-      0,
-      0,
-      layout.contentWidth,
-      layout.cartesian.chartAreaHeight,
+    const chartAreaFrame = createTransparentFrame(
+      "Plot area",
+      padding.left,
+      padding.top,
+      plotWidth,
+      plotHeight,
     );
-    contentFrame.appendChild(labelsFrame);
-    contentFrame.appendChild(chartAreaFrame);
+    contentFrame.appendChild(chartBodyFrame);
+    chartBodyFrame.appendChild(chartAreaFrame);
 
     drawGridAndAxes(
       chartAreaFrame,
       payload,
-      padding,
+      { top: 0, left: 0, right: 0, bottom: 0 },
       plotWidth,
       plotHeight,
       niceMax,
@@ -760,11 +760,8 @@ async function createEditableLineChart(
       const seriesName = getSeriesName(payload.seriesNames, seriesIndex);
       const points = rows.map((row, rowIndex) => {
         const value = getFiniteNumber(row.values[seriesIndex], 0);
-        const x = padding.left + (plotWidth * rowIndex) / denominator;
-        const y =
-          padding.top +
-          plotHeight -
-          (Math.max(0, value) / niceMax) * plotHeight;
+        const x = (plotWidth * rowIndex) / denominator;
+        const y = plotHeight - (Math.max(0, value) / niceMax) * plotHeight;
         return sanitizeChartPoint({ x, y, value, label: row.label });
       });
 
@@ -855,9 +852,9 @@ async function createEditableLineChart(
       }
     }
 
-    drawYAxisTickLabels(labelsFrame, payload, padding, plotHeight, niceMax);
+    drawYAxisTickLabels(chartBodyFrame, payload, padding, plotHeight, niceMax);
     drawXAxisCategoryLabels(
-      labelsFrame,
+      chartBodyFrame,
       payload,
       rows,
       padding,
@@ -865,7 +862,7 @@ async function createEditableLineChart(
       plotHeight,
     );
     drawAxisLabels(
-      labelsFrame,
+      chartBodyFrame,
       payload,
       padding,
       plotWidth,
@@ -1391,52 +1388,40 @@ function drawAxisLabels(
   }
 
   if (payload.yLabel) {
-    const plotTop = padding.top;
-    const plotCenterY = plotTop + plotHeight / 2;
     const yAxisTitleHeight = TEXT_STYLES.axisTitle.lineHeight;
-    const yAxisTitleWidth = plotHeight;
-    const yAxisTickLabelGutterX = Math.max(
-      0,
-      padding.left - layout.cartesian.yAxisTickLabelGutterWidth,
-    );
-    const yAxisTitleGutterX = Math.max(
-      0,
-      yAxisTickLabelGutterX - layout.cartesian.yAxisTitleGutterWidth,
-    );
-    const yAxisTitlePosition = positionYAxisTitle({
-      plotCenterY,
-      yAxisTitleGutterX,
-      yAxisTickLabelGutterX,
-      yAxisTitleWidth,
-      yAxisTitleHeight,
-    });
-    const yLabelAreaWidth = Math.max(32, padding.left);
     const yLabelArea = withConstraints(
-      createTransparentFrame(
+      createAutoLayoutFrame(
         "Y axis label area",
         0,
-        padding.top,
-        yLabelAreaWidth,
-        plotHeight,
+        0,
+        "VERTICAL",
+        0,
+        "AUTO",
+        "AUTO",
       ),
       "MIN",
-      "STRETCH",
+      "CENTER",
     );
+    yLabelArea.primaryAxisAlignItems = "CENTER";
+    yLabelArea.counterAxisAlignItems = "CENTER";
     const yLabel = withConstraints(
       createText(
         payload.yLabel,
         TEXT_STYLES.axisTitle.fontSize,
         TEXT_STYLES.axisTitle.font,
         COLORS.text,
-        yAxisTitlePosition.x,
-        yAxisTitlePosition.y,
-        yAxisTitleWidth,
+        0,
+        0,
+        1,
         yAxisTitleHeight,
         "CENTER",
       ),
       "CENTER",
       "CENTER",
     );
+    (
+      yLabel as TextNode & { textAutoResize?: "WIDTH_AND_HEIGHT" }
+    ).textAutoResize = "WIDTH_AND_HEIGHT";
     yLabel.name = "Y axis label";
     yLabel.rotation = -90;
     yLabelArea.appendChild(yLabel);
