@@ -1535,7 +1535,7 @@ function drawYAxisTickLabels(
       "AUTO",
     );
     tickLabel.counterAxisAlignItems = "CENTER";
-    tickLabel.primaryAxisAlignItems = "MIN";
+    tickLabel.primaryAxisAlignItems = "MAX";
     const tickText = createText(
       axisLabelValue,
       11,
@@ -1561,10 +1561,7 @@ function drawYAxisTickLabels(
 
   const labelColumnWidth = (labelColumn as FrameNode & { width: number }).width;
   if (labelColumn.resize) labelColumn.resize(labelColumnWidth, plotHeight);
-  labelColumn.x = Math.max(
-    0,
-    padding.left - labelColumnWidth - LABEL_TO_CHART_GAP,
-  );
+  labelColumn.x = 0;
   frame.appendChild(labelColumn);
   return labelColumn;
 }
@@ -1726,42 +1723,66 @@ function drawLegend(
 ) {
   const colors = PALETTES[payload.palette].map(hexToRgb);
   const legendFrame = withConstraints(
-    createTransparentFrame(
+    createAutoLayoutFrame(
       "Chart legend",
       0,
       0,
-      layout.contentWidth,
-      layout.cartesian.legendHeight || 24,
+      "HORIZONTAL",
+      0,
+      "FIXED",
+      "FIXED",
     ),
     "STRETCH",
     "MAX",
   );
-  const legendWidth = layout.contentWidth;
-  const itemWidth = Math.min(118, legendWidth / payload.seriesNames.length);
-  const totalItemsWidth = itemWidth * payload.seriesNames.length;
+  if (legendFrame.resize) {
+    legendFrame.resize(
+      layout.contentWidth,
+      layout.cartesian.legendHeight || 24,
+    );
+  }
+  legendFrame.primaryAxisAlignItems = "CENTER";
+  legendFrame.counterAxisAlignItems = "CENTER";
+
   const itemsFrame = withConstraints(
-    createTransparentFrame(
+    createAutoLayoutFrame(
       "Chart legend items",
-      (legendWidth - totalItemsWidth) / 2,
       0,
-      totalItemsWidth,
-      24,
+      0,
+      "HORIZONTAL",
+      16,
+      "AUTO",
+      "AUTO",
     ),
-    "CENTER",
+    "MIN",
     "CENTER",
   );
+  itemsFrame.primaryAxisAlignItems = "MIN";
+  itemsFrame.counterAxisAlignItems = "CENTER";
 
   payload.seriesNames.forEach((name, index) => {
     const itemFrame = withConstraints(
-      createTransparentFrame(
+      createAutoLayoutFrame(
         `Legend item · ${name}`,
-        index * itemWidth,
         0,
-        itemWidth,
-        20,
+        0,
+        "HORIZONTAL",
+        8,
+        "AUTO",
+        "AUTO",
       ),
       "MIN",
       "CENTER",
+    );
+    itemFrame.primaryAxisAlignItems = "MIN";
+    itemFrame.counterAxisAlignItems = "CENTER";
+
+    const swatchFrame = createTransparentFrame(
+      `Legend swatch · ${name}`,
+      0,
+      0,
+      16,
+      20,
     );
     const swatchY = 10;
     if (payload.type === "line") {
@@ -1771,7 +1792,7 @@ function drawLegend(
         payload.seriesNames.length,
       );
       createLineLegendSwatch(
-        itemFrame,
+        swatchFrame,
         name,
         swatchY,
         colors[index % colors.length],
@@ -1780,11 +1801,11 @@ function drawLegend(
         payload.showPoints,
       );
     } else {
-      itemFrame.appendChild(
+      swatchFrame.appendChild(
         withConstraints(
           createRectangle(
             `Legend color · ${name}`,
-            0,
+            3,
             5,
             10,
             10,
@@ -1797,7 +1818,7 @@ function drawLegend(
       );
     }
     if (payload.type === "line" && payload.showPoints) {
-      itemFrame.appendChild(
+      swatchFrame.appendChild(
         withConstraints(
           createEllipse(
             `Legend point · ${name}`,
@@ -1814,22 +1835,10 @@ function drawLegend(
         ),
       );
     }
+
+    itemFrame.appendChild(swatchFrame);
     itemFrame.appendChild(
-      withConstraints(
-        createText(
-          name,
-          11,
-          FONT_REGULAR,
-          COLORS.text,
-          20,
-          2,
-          Math.max(24, itemWidth - 20),
-          20,
-          "LEFT",
-        ),
-        "STRETCH",
-        "CENTER",
-      ),
+      createText(name, 11, FONT_REGULAR, COLORS.text, 0, 0, 1, 20, "LEFT"),
     );
     itemsFrame.appendChild(itemFrame);
   });
