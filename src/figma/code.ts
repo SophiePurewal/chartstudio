@@ -852,17 +852,32 @@ async function createEditableLineChart(
         layout.cartesian.chartAreaHeight,
       ),
     );
+    chartBodyFrame.layoutMode = "HORIZONTAL";
+    chartBodyFrame.primaryAxisSizingMode = "FIXED";
+    chartBodyFrame.counterAxisSizingMode = "FIXED";
+    chartBodyFrame.primaryAxisAlignItems = "MIN";
+    chartBodyFrame.counterAxisAlignItems = "MIN";
+    chartBodyFrame.itemSpacing = LABEL_TO_CHART_GAP;
+
+    const plotAreaColumn = createTransparentFrame(
+      "Plot area column",
+      0,
+      0,
+      plotWidth,
+      layout.cartesian.chartAreaHeight,
+    );
+
     const chartAreaFrame = await runChartStep("creating Plot area", () =>
       createTransparentFrame(
         "Plot area",
-        padding.left,
+        0,
         padding.top,
         plotWidth,
         plotHeight,
       ),
     );
     contentFrame.appendChild(chartBodyFrame);
-    chartBodyFrame.appendChild(chartAreaFrame);
+    plotAreaColumn.appendChild(chartAreaFrame);
 
     drawGridAndAxes(
       chartAreaFrame,
@@ -1016,8 +1031,21 @@ async function createEditableLineChart(
       yAxisLabel.appendChild(yAxisLabelText);
       yAxisFrame.appendChild(yAxisLabel);
     }
+    const yAxisTickLabelsArea = createAutoLayoutFrame(
+      "Y axis tick labels area",
+      0,
+      0,
+      "VERTICAL",
+      0,
+      "AUTO",
+      "AUTO",
+    );
+    yAxisTickLabelsArea.primaryAxisAlignItems = "MIN";
+    yAxisTickLabelsArea.counterAxisAlignItems = "MAX";
+    yAxisFrame.appendChild(yAxisTickLabelsArea);
+
     const yAxisTickLabels = drawYAxisTickLabels(
-      yAxisFrame,
+      yAxisTickLabelsArea,
       payload,
       { top: 0, left: 0, right: 0, bottom: 0 },
       plotHeight,
@@ -1028,17 +1056,14 @@ async function createEditableLineChart(
       yAxisTickLabels.y = 0;
     }
     chartBodyFrame.appendChild(yAxisFrame);
-
-    chartAreaFrame.x =
-      (yAxisFrame as FrameNode & { width: number }).width + LABEL_TO_CHART_GAP;
-    chartAreaFrame.y = padding.top;
+    chartBodyFrame.appendChild(plotAreaColumn);
 
     const xAxisFrame = await runChartStep("creating X Axis", () =>
       withConstraints(
         createAutoLayoutFrame(
           "X Axis",
-          chartAreaFrame.x,
-          chartAreaFrame.y + plotHeight + LABEL_TO_CHART_GAP,
+          0,
+          padding.top + plotHeight + LABEL_TO_CHART_GAP,
           "VERTICAL",
           LABEL_TO_CHART_GAP,
           "AUTO",
@@ -1087,7 +1112,7 @@ async function createEditableLineChart(
       xAxisLabel.appendChild(xAxisLabelText);
       xAxisFrame.appendChild(xAxisLabel);
     }
-    chartBodyFrame.appendChild(xAxisFrame);
+    plotAreaColumn.appendChild(xAxisFrame);
 
     if (payload.showLegend && seriesCount > 1) {
       const legendSection = await runChartStep("creating Chart Legend", () =>
