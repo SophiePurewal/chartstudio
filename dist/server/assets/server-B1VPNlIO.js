@@ -1830,6 +1830,21 @@ function getAssetCrossOrigin(assetCrossOrigin, kind) {
   if (typeof assetCrossOrigin === "string") return assetCrossOrigin;
   return assetCrossOrigin[kind];
 }
+function getManifestScriptFormat(manifest2) {
+  return manifest2?.scriptFormat ?? "module";
+}
+function getScriptPreloadAttrs(manifest2, link, assetCrossOrigin) {
+  const preloadLink = resolveManifestAssetLink(link);
+  const crossOrigin = getAssetCrossOrigin(assetCrossOrigin, "script") ?? preloadLink.crossOrigin;
+  return {
+    ...getManifestScriptFormat(manifest2) === "iife" ? {
+      rel: "preload",
+      as: "script"
+    } : { rel: "modulepreload" },
+    href: preloadLink.href,
+    ...crossOrigin ? { crossOrigin } : {}
+  };
+}
 function resolveManifestAssetLink(link) {
   if (typeof link === "string") return {
     href: link,
@@ -1837,32 +1852,38 @@ function resolveManifestAssetLink(link) {
   };
   return link;
 }
-function getStylesheetHref(asset) {
-  if (asset.tag !== "link") return void 0;
-  const rel = asset.attrs?.rel;
-  const href = asset.attrs?.href;
-  if (typeof href !== "string") return void 0;
-  if (!(typeof rel === "string" ? rel.split(/\s+/) : []).includes("stylesheet")) return void 0;
-  return href;
+function appendUniqueUserTags(target, tags) {
+  if (tags.length === 0) return;
+  if (tags.length === 1) {
+    target.push(tags[0]);
+    return;
+  }
+  const seen = /* @__PURE__ */ new Set();
+  for (const tag of tags) {
+    const key = JSON.stringify(tag);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    target.push(tag);
+  }
 }
-function isInlinableStylesheet(manifest2, asset) {
-  const href = getStylesheetHref(asset);
-  return !!href && manifest2?.inlineCss?.styles[href] !== void 0;
+function getStylesheetHref(asset) {
+  return resolveManifestCssLink(asset).href;
+}
+function resolveManifestCssLink(link) {
+  if (typeof link === "string") return {
+    href: link,
+    crossOrigin: void 0
+  };
+  return link;
 }
 function createInlineCssStyleAsset(css) {
   return {
-    tag: "style",
     attrs: { suppressHydrationWarning: true },
-    inlineCss: true,
     children: css
   };
 }
 function createInlineCssPlaceholderAsset() {
-  return {
-    tag: "style",
-    attrs: { suppressHydrationWarning: true },
-    inlineCss: true
-  };
+  return { attrs: { suppressHydrationWarning: true } };
 }
 const GLOBAL_TSR = "$_TSR";
 const TSR_SCRIPT_BARRIER_ID = "$tsr-stream-barrier";
@@ -14938,7 +14959,6 @@ var ScriptBuffer = class {
 };
 const MANIFEST_CACHE_SIZE = 100;
 const manifestCaches = /* @__PURE__ */ new WeakMap();
-const inlineCssCaches = /* @__PURE__ */ new WeakMap();
 function getManifestCache(manifest2) {
   const cache = manifestCaches.get(manifest2);
   if (cache) return cache;
@@ -14946,83 +14966,141 @@ function getManifestCache(manifest2) {
   manifestCaches.set(manifest2, newCache);
   return newCache;
 }
-function getInlineCssCache(manifest2) {
-  const cache = inlineCssCaches.get(manifest2);
-  if (cache) return cache;
-  const newCache = createLRUCache(MANIFEST_CACHE_SIZE);
-  inlineCssCaches.set(manifest2, newCache);
-  return newCache;
-}
-function getInlineCssHrefsForMatches(manifest2, matches) {
-  const styles = manifest2?.inlineCss?.styles;
-  if (!styles) return [];
-  const seen = /* @__PURE__ */ new Set();
-  const hrefs = [];
-  for (const match of matches) {
-    const assets = manifest2?.routes[match.routeId]?.assets ?? [];
-    for (const asset of assets) {
-      const href = getStylesheetHref(asset);
-      if (!href || seen.has(href) || styles[href] === void 0) continue;
-      seen.add(href);
-      hrefs.push(href);
-    }
-  }
-  return hrefs;
-}
-function getInlineCssForHrefs(manifest2, hrefs) {
+function getInlineCssForPreparedRoutes(manifest2, preparedRoutes) {
+  if (preparedRoutes.inlineCss !== void 0) return preparedRoutes.inlineCss;
   const styles = manifest2.inlineCss?.styles;
-  if (!styles || hrefs.length === 0) return void 0;
-  const cacheKey = hrefs.join("\0");
-  {
-    const cached = getInlineCssCache(manifest2).get(cacheKey);
-    if (cached !== void 0) return cached;
-  }
-  const css = hrefs.map((href) => styles[href]).join("");
-  getInlineCssCache(manifest2).set(cacheKey, css);
+  const hrefs = preparedRoutes.inlineCssHrefs;
+  if (!styles || !hrefs?.length) return void 0;
+  let css = "";
+  for (const href of hrefs) css += styles[href];
+  preparedRoutes.inlineCss = css;
   return css;
 }
-function getInlineCssAssetForMatches(manifest2, matches) {
-  if (!manifest2?.inlineCss) return void 0;
-  const css = getInlineCssForHrefs(manifest2, getInlineCssHrefsForMatches(manifest2, matches));
+function getInlineCssAssetForPreparedRoutes(manifest2, preparedRoutes) {
+  const css = getInlineCssForPreparedRoutes(manifest2, preparedRoutes);
   return css === void 0 ? void 0 : createInlineCssStyleAsset(css);
 }
-function stripInlinedStylesheetAssets(manifest2, routes, matches) {
-  if (!manifest2.inlineCss) return routes;
-  const nextRoutes = {};
-  for (const [routeId, route] of Object.entries(routes)) {
-    const assets = route.assets?.filter((asset) => !isInlinableStylesheet(manifest2, asset));
-    const nextRoute = { ...route };
-    if (assets) if (assets.length > 0) nextRoute.assets = assets;
-    else delete nextRoute.assets;
-    nextRoutes[routeId] = nextRoute;
+function getMatchedRoutesCacheKey(matches) {
+  let cacheKey = "";
+  for (let i = 0; i < matches.length; i++) cacheKey += (i === 0 ? "" : "\0") + matches[i].routeId;
+  return cacheKey;
+}
+function getPreparedMatchedManifestRoutes(manifest2, matches, cacheKey) {
+  {
+    const cached = getManifestCache(manifest2).get(cacheKey);
+    if (cached) return cached;
   }
-  if (getInlineCssAssetForMatches(manifest2, matches)) {
-    const rootRoute = nextRoutes["__root__"] ?? {};
-    nextRoutes[rootRouteId] = {
-      ...rootRoute,
-      assets: [createInlineCssPlaceholderAsset(), ...rootRoute.assets ?? []]
+  const preparedRoutes = prepareMatchedManifestRoutes(manifest2, matches);
+  getManifestCache(manifest2).set(cacheKey, preparedRoutes);
+  return preparedRoutes;
+}
+function prepareMatchedManifestRoutes(manifest2, matches) {
+  const inlineStyles = manifest2.inlineCss?.styles;
+  const routes = {};
+  if (!inlineStyles) {
+    for (const match of matches) {
+      const route = manifest2.routes[match.routeId];
+      if (route) routes[match.routeId] = route;
+    }
+    return {
+      routes,
+      hasStrippedRoutes: false
     };
   }
-  return nextRoutes;
+  const inlineCssHrefs = [];
+  const seenInlineCssHrefs = /* @__PURE__ */ new Set();
+  let hasStrippedRoutes = false;
+  for (const match of matches) {
+    const routeId = match.routeId;
+    const route = manifest2.routes[routeId];
+    if (!route) continue;
+    const nextRoute = stripInlinedStylesheetAssetsFromRoute(inlineStyles, route, inlineCssHrefs, seenInlineCssHrefs);
+    if (nextRoute !== route) hasStrippedRoutes = true;
+    routes[routeId] = nextRoute;
+  }
+  return {
+    routes,
+    hasStrippedRoutes,
+    ...inlineCssHrefs.length ? { inlineCssHrefs } : {}
+  };
 }
-function attachRouterServerSsrUtils({ router, manifest: manifest2, getRequestAssets, includeUnmatchedRouteAssets = true }) {
+function stripInlinedStylesheetAssetsFromRoute(inlineStyles, route, inlineCssHrefs, seenInlineCssHrefs) {
+  const css = route.css;
+  if (!css) return route;
+  if (css.length === 0) {
+    const nextRoute2 = { ...route };
+    delete nextRoute2.css;
+    return nextRoute2;
+  }
+  let cssLinks;
+  for (let i = 0; i < css.length; i++) {
+    const link = css[i];
+    const href = getStylesheetHref(link);
+    if (inlineStyles[href] === void 0) {
+      if (cssLinks) cssLinks.push(link);
+      continue;
+    }
+    if (!seenInlineCssHrefs.has(href)) {
+      seenInlineCssHrefs.add(href);
+      inlineCssHrefs.push(href);
+    }
+    if (!cssLinks) cssLinks = css.slice(0, i);
+  }
+  if (!cssLinks) return route;
+  if (cssLinks.length > 0) return {
+    ...route,
+    css: cssLinks
+  };
+  const nextRoute = { ...route };
+  delete nextRoute.css;
+  return nextRoute;
+}
+function hasRouteAssets(route) {
+  return !!route.scripts?.length || !!route.css?.length;
+}
+function hasRequestAssets(assets) {
+  return !!assets && (!!assets.preloads?.length || hasRouteAssets(assets));
+}
+function mergeRequestAssetsIntoRootRoute(rootRoute, requestAssets) {
+  const preloads = requestAssets?.preloads?.length ? [...requestAssets.preloads, ...rootRoute?.preloads ?? []] : rootRoute?.preloads;
+  const scripts = requestAssets?.scripts?.length ? [...requestAssets.scripts, ...rootRoute?.scripts ?? []] : rootRoute?.scripts;
+  const cssLinks = requestAssets?.css?.length ? [...requestAssets.css, ...rootRoute?.css ?? []] : rootRoute?.css;
+  return {
+    ...rootRoute ?? {},
+    ...preloads?.length ? { preloads } : {},
+    ...scripts?.length ? { scripts } : {},
+    ...cssLinks?.length ? { css: cssLinks } : {}
+  };
+}
+function attachRouterServerSsrUtils({ router, manifest: manifest2, getRequestAssets }) {
   router.ssr = { get manifest() {
     if (!manifest2) return manifest2;
     const requestAssets = getRequestAssets?.();
-    const inlineCssAsset = getInlineCssAssetForMatches(manifest2, router.stores.matches.get());
-    if (!requestAssets?.length && !inlineCssAsset) return manifest2;
-    return {
-      ...manifest2,
-      routes: {
+    const matches = router.stores.matches.get();
+    const hasAssets = hasRequestAssets(requestAssets);
+    if (!hasAssets && !manifest2.inlineCss) return manifest2;
+    let inlineCssAsset;
+    let routes = manifest2.routes;
+    if (manifest2.inlineCss) {
+      const preparedManifest = getPreparedMatchedManifestRoutes(manifest2, matches, getMatchedRoutesCacheKey(matches));
+      inlineCssAsset = getInlineCssAssetForPreparedRoutes(manifest2, preparedManifest);
+      if (preparedManifest.hasStrippedRoutes) routes = {
         ...manifest2.routes,
-        [rootRouteId]: {
-          ...manifest2.routes[rootRouteId],
-          assets: [
-            ...requestAssets ?? [],
-            ...inlineCssAsset ? [inlineCssAsset] : [],
-            ...manifest2.routes["__root__"]?.assets ?? []
-          ]
-        }
+        ...preparedManifest.routes
+      };
+    }
+    if (!hasAssets) return {
+      ...manifest2.scriptFormat ? { scriptFormat: manifest2.scriptFormat } : {},
+      ...inlineCssAsset ? { inlineStyle: inlineCssAsset } : {},
+      routes
+    };
+    const rootRoute = routes[rootRouteId];
+    return {
+      ...manifest2.scriptFormat ? { scriptFormat: manifest2.scriptFormat } : {},
+      ...inlineCssAsset ? { inlineStyle: inlineCssAsset } : {},
+      routes: {
+        ...routes,
+        [rootRouteId]: mergeRequestAssetsIntoRootRoute(rootRoute, requestAssets)
       }
     };
   } };
@@ -15052,27 +15130,19 @@ function attachRouterServerSsrUtils({ router, manifest: manifest2, getRequestAss
       const matches = matchesToDehydrate.map(dehydrateMatch);
       let manifestToDehydrate = void 0;
       if (manifest2) {
-        const currentRouteIdsList = matchesToDehydrate.map((m2) => m2.routeId);
-        const manifestCacheKey = `${currentRouteIdsList.join("\0")}\0includeUnmatchedRouteAssets=${includeUnmatchedRouteAssets}`;
-        let filteredRoutes;
-        filteredRoutes = getManifestCache(manifest2).get(manifestCacheKey);
-        if (!filteredRoutes) {
-          const currentRouteIds = new Set(currentRouteIdsList);
-          const nextFilteredRoutes = {};
-          for (const routeId in manifest2.routes) {
-            const routeManifest = manifest2.routes[routeId];
-            if (currentRouteIds.has(routeId)) nextFilteredRoutes[routeId] = routeManifest;
-            else if (includeUnmatchedRouteAssets && routeManifest.assets && routeManifest.assets.length > 0) nextFilteredRoutes[routeId] = { assets: routeManifest.assets };
-          }
-          filteredRoutes = stripInlinedStylesheetAssets(manifest2, nextFilteredRoutes, matchesToDehydrate);
-          getManifestCache(manifest2).set(manifestCacheKey, filteredRoutes);
-        }
-        manifestToDehydrate = { routes: { ...filteredRoutes } };
-        if (opts?.requestAssets?.length) {
+        const cacheKey = getMatchedRoutesCacheKey(matchesToDehydrate);
+        const preparedManifest = getPreparedMatchedManifestRoutes(manifest2, matchesToDehydrate, cacheKey);
+        manifestToDehydrate = {
+          ...manifest2.scriptFormat ? { scriptFormat: manifest2.scriptFormat } : {},
+          ...preparedManifest.inlineCssHrefs ? { inlineStyle: createInlineCssPlaceholderAsset() } : {},
+          routes: preparedManifest.routes
+        };
+        const requestAssets = opts?.requestAssets;
+        if (hasRequestAssets(requestAssets)) {
           const existingRoot = manifestToDehydrate.routes[rootRouteId];
-          manifestToDehydrate.routes[rootRouteId] = {
-            ...existingRoot,
-            assets: [...opts.requestAssets, ...existingRoot?.assets ?? []]
+          manifestToDehydrate.routes = {
+            ...manifestToDehydrate.routes,
+            [rootRouteId]: mergeRequestAssetsIntoRootRoute(existingRoot, requestAssets)
           };
         }
       }
@@ -15967,31 +16037,26 @@ function getResponse() {
 }
 var HEADERS = { TSS_SHELL: "X-TSS_SHELL" };
 async function getStartManifest(matchedRoutes) {
-  const { tsrStartManifest } = await import("./_tanstack-start-manifest_v-Dt_MUckn.js");
+  const { tsrStartManifest } = await import("./_tanstack-start-manifest_v-CLB4y5vU.js");
   const startManifest = tsrStartManifest();
-  const rootRoute = startManifest.routes[rootRouteId] = startManifest.routes[rootRouteId] || {};
-  rootRoute.assets = rootRoute.assets || [];
-  let injectedHeadScripts;
+  let routes = startManifest.routes;
+  routes[rootRouteId];
+  const manifestRoutes = {};
+  for (const k2 in routes) {
+    const v2 = routes[k2];
+    const result = {};
+    if (v2.preloads && v2.preloads.length > 0) result.preloads = v2.preloads;
+    if (v2.scripts && v2.scripts.length > 0) result.scripts = v2.scripts;
+    if (v2.css?.length) result.css = v2.css;
+    if (result.preloads || result.scripts || result.css) manifestRoutes[k2] = result;
+  }
   return {
     manifest: {
-      inlineCss: startManifest.inlineCss,
-      routes: Object.fromEntries(Object.entries(startManifest.routes).flatMap(([k2, v2]) => {
-        const result = {};
-        let hasData = false;
-        if (v2.preloads && v2.preloads.length > 0) {
-          result["preloads"] = v2.preloads;
-          hasData = true;
-        }
-        if (v2.assets && v2.assets.length > 0) {
-          result["assets"] = v2.assets;
-          hasData = true;
-        }
-        if (!hasData) return [];
-        return [[k2, result]];
-      }))
+      ...startManifest.scriptFormat ? { scriptFormat: startManifest.scriptFormat } : {},
+      ...startManifest.inlineCss ? { inlineCss: startManifest.inlineCss } : {},
+      routes: manifestRoutes
     },
-    clientEntry: startManifest.clientEntry,
-    injectedHeadScripts
+    clientEntry: startManifest.clientEntry
   };
 }
 const manifest = {};
@@ -16016,9 +16081,13 @@ var X_TSS_SERIALIZED = "x-tss-serialized";
 var X_TSS_RAW_RESPONSE = "x-tss-raw";
 var TSS_CONTENT_TYPE_FRAMED = "application/x-tss-framed";
 var FrameType = {
+  /** Seroval JSON chunk (NDJSON line) */
   JSON: 0,
+  /** Raw stream data chunk */
   CHUNK: 1,
+  /** Raw stream end (EOF) */
   END: 2,
+  /** Raw stream error */
   ERROR: 3
 };
 var FRAME_HEADER_SIZE = 9;
@@ -16571,31 +16640,26 @@ function collectStaticHintsFromManifest(manifest2, matchedRoutes) {
     const routeManifest = manifest2.routes[route.id];
     if (!routeManifest) continue;
     for (const link of routeManifest.preloads ?? []) {
-      const { href, crossOrigin } = resolveManifestAssetLink(link);
+      const attrs = getScriptPreloadAttrs(manifest2, link);
       const hint = {
-        href,
-        rel: "modulepreload",
+        href: attrs.href,
+        rel: attrs.rel,
         as: "script"
       };
-      if (crossOrigin !== void 0) hint.crossOrigin = crossOrigin;
+      if (attrs.crossOrigin !== void 0) hint.crossOrigin = attrs.crossOrigin;
       hints.push(hint);
     }
-    for (const asset of routeManifest.assets ?? []) {
-      if (asset.tag !== "link") continue;
-      const stylesheetHref = getStylesheetHref(asset);
-      if (stylesheetHref) {
-        if (manifest2.inlineCss?.styles[stylesheetHref] !== void 0) continue;
-        const hint2 = {
-          href: stylesheetHref,
-          rel: "preload",
-          as: "style"
-        };
-        addEarlyHintFetchAttrs(hint2, asset.attrs);
-        hints.push(hint2);
-        continue;
-      }
-      const hint = linkAttrsToEarlyHint(asset.attrs);
-      if (hint) hints.push(hint);
+    for (const link of routeManifest.css ?? []) {
+      const stylesheetHref = getStylesheetHref(link);
+      if (manifest2.inlineCss?.styles[stylesheetHref] !== void 0) continue;
+      const resolvedLink = resolveManifestCssLink(link);
+      const hint = {
+        href: stylesheetHref,
+        rel: "preload",
+        as: "style"
+      };
+      if (resolvedLink.crossOrigin !== void 0) hint.crossOrigin = resolvedLink.crossOrigin;
+      hints.push(hint);
     }
   }
   return hints;
@@ -16806,7 +16870,7 @@ function resolveTransformAssetsConfig(transform) {
       type: "transform",
       transformFn: ({ url, kind }) => {
         const href = `${prefix}${url}`;
-        if (kind === "clientEntry" || kind === "css-url") return { href };
+        if (kind === "css-url") return { href };
         const co2 = resolveTransformAssetsCrossOrigin(crossOrigin, kind);
         return co2 ? {
           href,
@@ -16827,74 +16891,101 @@ function resolveTransformAssetsConfig(transform) {
     cache: transform.cache !== false
   };
 }
-function buildClientEntryScriptTag(clientEntry, injectedHeadScripts) {
-  let script = `import(${JSON.stringify(clientEntry)})`;
-  if (injectedHeadScripts) script = `${injectedHeadScripts};${script}`;
-  return {
-    tag: "script",
-    attrs: {
-      type: "module",
-      async: true
-    },
-    children: script
-  };
+function buildClientEntryScriptTag(clientEntry, scriptFormat = "module", crossOrigin) {
+  return { attrs: {
+    ...scriptFormat === "module" ? { type: "module" } : {},
+    async: true,
+    src: clientEntry,
+    ...{}
+  } };
 }
-function assignManifestAssetLink(link, next) {
+function assignManifestLink(link, next) {
   if (typeof link === "string") return next.crossOrigin ? next : next.href;
-  return next.crossOrigin ? next : { href: next.href };
+  const nextLink = {
+    ...link,
+    href: next.href
+  };
+  if (next.crossOrigin) nextLink.crossOrigin = next.crossOrigin;
+  else delete nextLink.crossOrigin;
+  return nextLink;
+}
+function appendUniqueManifestAssetLink(target, link) {
+  const href = typeof link === "string" ? link : link.href;
+  if (target) {
+    for (const item of target) if ((typeof item === "string" ? item : item.href) === href) return target;
+  }
+  return [...target ?? [], link];
+}
+function addClientEntryToManifest(manifest2, clientEntry) {
+  const rootRoute = manifest2.routes.__root__ ?? {};
+  const rootScripts = rootRoute.scripts ?? [];
+  const scripts = rootScripts.some((script) => script.attrs?.src === clientEntry) ? rootScripts : [...rootScripts, buildClientEntryScriptTag(clientEntry, getManifestScriptFormat(manifest2))];
+  manifest2.routes = {
+    ...manifest2.routes,
+    __root__: {
+      ...rootRoute,
+      preloads: appendUniqueManifestAssetLink(rootRoute.preloads, clientEntry),
+      scripts
+    }
+  };
 }
 async function transformManifestAssets(source, transformFn, _opts) {
   const manifest2 = structuredClone(source.manifest);
-  if (!(_opts?.inlineCss !== false)) delete manifest2.inlineCss;
+  const inlineCssEnabled = _opts?.inlineCss !== false;
+  const scriptTransforms = /* @__PURE__ */ new Map();
+  const transformScript = (url) => {
+    const cached = scriptTransforms.get(url);
+    if (cached) return cached;
+    const transformed = Promise.resolve(transformFn({
+      url,
+      kind: "script"
+    })).then(normalizeTransformAssetResult);
+    scriptTransforms.set(url, transformed);
+    return transformed;
+  };
+  if (!inlineCssEnabled) delete manifest2.inlineCss;
   else if (manifest2.inlineCss) manifest2.inlineCss = await transformInlineCssStyles(manifest2.inlineCss, transformFn);
+  addClientEntryToManifest(manifest2, source.clientEntry);
   for (const route of Object.values(manifest2.routes)) {
-    if (route.preloads) route.preloads = await Promise.all(route.preloads.map(async (link) => {
-      const result = normalizeTransformAssetResult(await transformFn({
-        url: resolveManifestAssetLink(link).href,
-        kind: "modulepreload"
-      }));
-      return assignManifestAssetLink(link, {
+    if (route.preloads?.length) route.preloads = await Promise.all(route.preloads.map(async (link) => {
+      const result = await transformScript(resolveManifestAssetLink(link).href);
+      return assignManifestLink(link, {
         href: result.href,
         crossOrigin: result.crossOrigin
       });
     }));
-    if (route.assets && !manifest2.inlineCss) {
-      for (const asset of route.assets) if (asset.tag === "link" && asset.attrs?.href) {
-        const rel = asset.attrs.rel;
-        if (!(typeof rel === "string" ? rel.split(/\s+/) : []).includes("stylesheet")) continue;
-        const result = normalizeTransformAssetResult(await transformFn({
-          url: asset.attrs.href,
-          kind: "stylesheet"
-        }));
-        asset.attrs.href = result.href;
-        if (result.crossOrigin) asset.attrs.crossOrigin = result.crossOrigin;
-        else delete asset.attrs.crossOrigin;
-      }
+    if (route.css?.length && !manifest2.inlineCss) route.css = await Promise.all(route.css.map(async (link) => {
+      const result = normalizeTransformAssetResult(await transformFn({
+        url: resolveManifestCssLink(link).href,
+        kind: "stylesheet"
+      }));
+      return assignManifestLink(link, {
+        href: result.href,
+        crossOrigin: result.crossOrigin
+      });
+    }));
+    if (route.scripts?.length) for (const script of route.scripts) {
+      const src = script.attrs?.src;
+      if (typeof src !== "string") continue;
+      const result = await transformScript(src);
+      script.attrs = {
+        ...script.attrs,
+        src: result.href
+      };
+      if (result.crossOrigin) script.attrs.crossOrigin = result.crossOrigin;
+      else delete script.attrs.crossOrigin;
     }
   }
-  const transformedClientEntry = normalizeTransformAssetResult(await transformFn({
-    url: source.clientEntry,
-    kind: "clientEntry"
-  }));
-  const rootRoute = manifest2.routes[rootRouteId] = manifest2.routes[rootRouteId] || {};
-  rootRoute.assets = rootRoute.assets || [];
-  rootRoute.assets.push(buildClientEntryScriptTag(transformedClientEntry.href, source.injectedHeadScripts));
   return manifest2;
 }
 function buildManifestWithClientEntry(source, opts) {
-  const scriptTag = buildClientEntryScriptTag(source.clientEntry, source.injectedHeadScripts);
-  const baseRootRoute = source.manifest.routes[rootRouteId];
-  const routes = {
-    ...source.manifest.routes,
-    [rootRouteId]: {
-      ...baseRootRoute,
-      assets: [...baseRootRoute?.assets || [], scriptTag]
-    }
+  const manifest2 = {
+    ...source.manifest.scriptFormat ? { scriptFormat: source.manifest.scriptFormat } : {},
+    ...opts?.inlineCss !== false && source.manifest.inlineCss ? { inlineCss: structuredClone(source.manifest.inlineCss) } : {},
+    routes: { ...source.manifest.routes }
   };
-  return {
-    ...opts?.inlineCss === false ? {} : { inlineCss: structuredClone(source.manifest.inlineCss) },
-    routes
-  };
+  addClientEntryToManifest(manifest2, source.clientEntry);
+  return manifest2;
 }
 function getStaticHandlerInlineCssDefault(handlerInlineCss) {
   if (typeof handlerInlineCss === "function") return;
@@ -17053,9 +17144,9 @@ var getBaseManifest = getProdBaseManifest;
 var createEarlyHintsForRequest = createEarlyHintsCollector;
 async function loadEntries() {
   const [routerEntry, startEntry, pluginAdapters] = await Promise.all([
-    import("./router-CgzoH-aO.js"),
-    import("./start-C1Tgyoeh.js"),
-    import("./__23tanstack-start-plugin-adapters-Cwee5PKy.js")
+    import("./router-BP9vT0La.js"),
+    import("./start-FV39_GR6.js"),
+    import("./empty-plugin-adapters-BFgPZ6_d.js")
   ]);
   return {
     routerEntry,
@@ -17248,8 +17339,7 @@ function createStartHandler(cbOrOptions) {
         attachRouterServerSsrUtils({
           router: routerInstance,
           manifest: manifest2,
-          getRequestAssets: () => getStartContext({ throwIfNotFound: false })?.requestAssets,
-          includeUnmatchedRouteAssets: false
+          getRequestAssets: () => getStartContext({ throwIfNotFound: false })?.requestAssets
         });
         routerInstance.update({ additionalContext: { serverContext } });
         await routerInstance.load();
@@ -17386,60 +17476,61 @@ const server = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProper
   default: server_default
 }, Symbol.toStringTag, { value: "Module" }));
 export {
-  trimPathRight as $,
-  isNotFound as A,
-  isPromise as B,
-  isRedirect as C,
+  trimPathLeft as $,
+  isDangerousProtocol as A,
+  isNotFound as B,
+  isPromise as C,
   DEFAULT_PROTOCOL_ALLOWLIST as D,
-  isServer as E,
-  joinPaths as F,
-  jsxRuntimeExports as G,
-  last as H,
-  matchContext as I,
-  nullReplaceEqualDeep as J,
-  parseHref as K,
-  processRouteMasks as L,
-  processRouteTree as M,
-  reactExports as N,
+  isRedirect as E,
+  isServer as F,
+  joinPaths as G,
+  jsxRuntimeExports as H,
+  last as I,
+  matchContext as J,
+  nullReplaceEqualDeep as K,
+  parseHref as L,
+  processRouteMasks as M,
+  processRouteTree as N,
   Outlet as O,
-  redirect as P,
-  removeTrailingSlash as Q,
+  reactExports as P,
+  redirect as Q,
   React as R,
-  replaceEqualDeep as S,
-  requireReactDom as T,
-  resolveManifestAssetLink as U,
-  resolvePath as V,
-  rewriteBasepath as W,
-  rootRouteId as X,
-  server as Y,
-  trimPath as Z,
-  trimPathLeft as _,
-  arraysEqual as a,
-  useHydrated as a0,
-  useRouter as a1,
-  buildRouteBranch as b,
-  cleanPath as c,
-  compileDecodeCharMap as d,
-  composeRewrites as e,
-  createControlledPromise as f,
-  createLRUCache as g,
-  createMiddleware as h,
-  decodePath as i,
-  deepEqual as j,
-  dummyMatchContext as k,
-  encodePathLikeUrl as l,
-  escapeHtml as m,
-  exactPathTest as n,
-  executeRewriteInput as o,
-  executeRewriteOutput as p,
-  findFlatMatch as q,
-  findRouteMatch as r,
-  findSingleMatch as s,
-  functionalUpdate as t,
-  getAssetCrossOrigin as u,
-  hasKeys as v,
-  interpolatePath as w,
-  invariant as x,
-  isDangerousProtocol as y,
-  isInlinableStylesheet as z
+  removeTrailingSlash as S,
+  replaceEqualDeep as T,
+  requireReactDom as U,
+  resolveManifestCssLink as V,
+  resolvePath as W,
+  rewriteBasepath as X,
+  rootRouteId as Y,
+  server as Z,
+  trimPath as _,
+  appendUniqueUserTags as a,
+  trimPathRight as a0,
+  useHydrated as a1,
+  useRouter as a2,
+  arraysEqual as b,
+  buildRouteBranch as c,
+  cleanPath as d,
+  compileDecodeCharMap as e,
+  composeRewrites as f,
+  createControlledPromise as g,
+  createLRUCache as h,
+  createMiddleware as i,
+  decodePath as j,
+  deepEqual as k,
+  dummyMatchContext as l,
+  encodePathLikeUrl as m,
+  escapeHtml as n,
+  exactPathTest as o,
+  executeRewriteInput as p,
+  executeRewriteOutput as q,
+  findFlatMatch as r,
+  findRouteMatch as s,
+  findSingleMatch as t,
+  functionalUpdate as u,
+  getAssetCrossOrigin as v,
+  getScriptPreloadAttrs as w,
+  hasKeys as x,
+  interpolatePath as y,
+  invariant as z
 };
