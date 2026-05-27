@@ -113,9 +113,18 @@ declare const __html__: string;
 const FONT_REGULAR: FontName = { family: "Forever Forma", style: "Regular" };
 const FONT_MEDIUM: FontName = { family: "Forever Forma", style: "Medium" };
 const FONT_BOLD: FontName = { family: "Forever Forma", style: "Bold" };
-const FALLBACK_REGULAR: FontName = { family: "Inter", style: "Regular" };
-const FALLBACK_MEDIUM: FontName = { family: "Inter", style: "Medium" };
-const FALLBACK_BOLD: FontName = { family: "Inter", style: "Bold" };
+const FALLBACK_REGULAR: FontName = {
+  family: "Forever Forma Heading",
+  style: "Regular",
+};
+const FALLBACK_MEDIUM: FontName = {
+  family: "Forever Forma Heading",
+  style: "Medium",
+};
+const FALLBACK_BOLD: FontName = {
+  family: "Forever Forma Heading",
+  style: "Bold",
+};
 const FALLBACK_SYSTEM: FontName = { family: "Roboto", style: "Regular" };
 
 let ACTIVE_FONT_REGULAR: FontName = FONT_REGULAR;
@@ -643,7 +652,7 @@ function getChartSectionSpacing(payload: ChartPayload): number {
 }
 
 function getLineChartLegendSpacing(): number {
-  return 16;
+  return 0;
 }
 
 function finalizeChartFrame(frame: FrameNode, layout: ChartLayout): void {
@@ -859,14 +868,6 @@ async function createEditableLineChart(
     chartBodyFrame.counterAxisAlignItems = "MIN";
     chartBodyFrame.itemSpacing = LABEL_TO_CHART_GAP;
 
-    const plotAreaColumn = createTransparentFrame(
-      "Plot area column",
-      0,
-      0,
-      plotWidth,
-      layout.cartesian.chartAreaHeight,
-    );
-
     const chartAreaFrame = await runChartStep("creating Plot area", () =>
       createTransparentFrame(
         "Plot area",
@@ -877,7 +878,6 @@ async function createEditableLineChart(
       ),
     );
     contentFrame.appendChild(chartBodyFrame);
-    plotAreaColumn.appendChild(chartAreaFrame);
 
     drawGridAndAxes(
       chartAreaFrame,
@@ -1030,6 +1030,12 @@ async function createEditableLineChart(
       ).textAutoResize = "WIDTH_AND_HEIGHT";
       yAxisLabelText.rotation = -90;
       yAxisLabel.appendChild(yAxisLabelText);
+      if (yAxisLabel.resize) {
+        yAxisLabel.resize(
+          yAxisLabelAreaWidth,
+          layout.cartesian.chartAreaHeight,
+        );
+      }
       yAxisFrame.appendChild(yAxisLabel);
     }
     const yAxisTickLabelsArea = createAutoLayoutFrame(
@@ -1043,6 +1049,12 @@ async function createEditableLineChart(
     );
     yAxisTickLabelsArea.primaryAxisAlignItems = "MIN";
     yAxisTickLabelsArea.counterAxisAlignItems = "MAX";
+    if (yAxisTickLabelsArea.resize) {
+      yAxisTickLabelsArea.resize(
+        yAxisTickLabelsWidth,
+        layout.cartesian.chartAreaHeight,
+      );
+    }
     yAxisFrame.appendChild(yAxisTickLabelsArea);
 
     const yAxisTickLabels = drawYAxisTickLabels(
@@ -1057,25 +1069,26 @@ async function createEditableLineChart(
       yAxisTickLabels.y = 0;
     }
     chartBodyFrame.appendChild(yAxisFrame);
-    chartBodyFrame.appendChild(plotAreaColumn);
+    chartBodyFrame.appendChild(chartAreaFrame);
 
-    const xAxisFrame = await runChartStep("creating X Axis", () =>
+    const xAxisFrame = await runChartStep("creating X Axis labels", () =>
       withConstraints(
         createAutoLayoutFrame(
-          "X Axis",
+          "X Axis labels",
           0,
-          padding.top + plotHeight + LABEL_TO_CHART_GAP,
+          0,
           "VERTICAL",
           LABEL_TO_CHART_GAP,
-          "AUTO",
+          "FIXED",
           "AUTO",
         ),
-        "MIN",
+        "STRETCH",
         "MIN",
       ),
     );
     xAxisFrame.primaryAxisAlignItems = "MIN";
     xAxisFrame.counterAxisAlignItems = "CENTER";
+    if (xAxisFrame.resize) xAxisFrame.resize(plotWidth, 1);
     drawXAxisCategoryLabels(
       xAxisFrame,
       payload,
@@ -1113,7 +1126,7 @@ async function createEditableLineChart(
       xAxisLabel.appendChild(xAxisLabelText);
       xAxisFrame.appendChild(xAxisLabel);
     }
-    plotAreaColumn.appendChild(xAxisFrame);
+    contentFrame.appendChild(xAxisFrame);
 
     if (payload.showLegend && seriesCount > 1) {
       const legendSection = await runChartStep("creating Chart Legend", () =>
