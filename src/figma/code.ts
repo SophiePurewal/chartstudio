@@ -813,11 +813,20 @@ async function createEditableLineChart(
   const layout = createChartLayout(payload);
   const { padding, plotHeight } = layout.cartesian;
   const chartBodyWidth = layout.contentWidth;
+  const height = layout.contentHeight;
+  const seriesCount = Math.max(1, payload.seriesNames.length);
+  const rows = payload.rows.map((row) => ({
+    label: row.label,
+    values: row.values
+      .slice(0, seriesCount)
+      .map((value) => getFiniteNumber(value, 0)),
+  }));
+  const niceMax = niceCeil(getLargestValue(rows.map((row) => row.values)));
   const yAxisLabelAreaWidth = payload.yLabel
     ? layout.cartesian.yAxisTitleGutterWidth
     : 0;
   const yAxisTickLabelsWidth = payload.showAxisLabels
-    ? layout.cartesian.yAxisTickLabelGutterWidth
+    ? getLineYAxisTickLabelsWidth(payload, niceMax)
     : 0;
   const yAxisLabelGap = payload.yLabel ? LABEL_TO_CHART_GAP : 0;
   const yAxisTicksGap = payload.showAxisLabels ? LABEL_TO_CHART_GAP : 0;
@@ -828,15 +837,6 @@ async function createEditableLineChart(
     yAxisTickLabelsWidth -
     yAxisTicksGap;
   const plotWidth = Math.max(GRID * 10, Math.floor(calculatedPlotWidth));
-  const height = layout.contentHeight;
-  const seriesCount = Math.max(1, payload.seriesNames.length);
-  const rows = payload.rows.map((row) => ({
-    label: row.label,
-    values: row.values
-      .slice(0, seriesCount)
-      .map((value) => getFiniteNumber(value, 0)),
-  }));
-  const niceMax = niceCeil(getLargestValue(rows.map((row) => row.values)));
   const colors = PALETTES[payload.palette].map(hexToRgb);
   const { frame, contentFrame } = await runChartStep(
     "creating outer frame",
@@ -1001,6 +1001,7 @@ async function createEditableLineChart(
     );
     yAxisFrame.primaryAxisAlignItems = "MIN";
     yAxisFrame.counterAxisAlignItems = "CENTER";
+    yAxisFrame.itemSpacing = LABEL_TO_CHART_GAP;
     if (payload.yLabel) {
       const yAxisLabel = createAutoLayoutFrame(
         "Y axis label",
@@ -1488,6 +1489,21 @@ function drawXAxisTicks(
   });
 }
 
+function getLineYAxisTickLabelsWidth(
+  payload: ChartPayload,
+  niceMax: number,
+): number {
+  const steps = 4;
+  let longest = 0;
+  for (let index = steps; index >= 0; index -= 1) {
+    const value = (niceMax / steps) * index;
+    const label = formatAxisTickCompact(value, payload);
+    longest = Math.max(longest, label.length);
+  }
+  const estimatedWidth = Math.ceil(longest * 7 + 2);
+  return Math.max(estimatedWidth, 1);
+}
+
 function drawYAxisTickLabels(
   frame: FrameNode,
   payload: ChartPayload,
@@ -1712,20 +1728,21 @@ function drawLegend(
   const legendFrame = withConstraints(
     createTransparentFrame(
       "Chart legend",
-      padding.left,
       0,
-      plotWidth,
+      0,
+      layout.contentWidth,
       layout.cartesian.legendHeight || 24,
     ),
     "STRETCH",
     "MAX",
   );
-  const itemWidth = Math.min(118, plotWidth / payload.seriesNames.length);
+  const legendWidth = layout.contentWidth;
+  const itemWidth = Math.min(118, legendWidth / payload.seriesNames.length);
   const totalItemsWidth = itemWidth * payload.seriesNames.length;
   const itemsFrame = withConstraints(
     createTransparentFrame(
       "Chart legend items",
-      (plotWidth - totalItemsWidth) / 2,
+      (legendWidth - totalItemsWidth) / 2,
       0,
       totalItemsWidth,
       24,
