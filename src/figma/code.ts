@@ -820,332 +820,254 @@ async function createEditableLineChart(
   payload: ChartPayload,
 ): Promise<FrameNode> {
   const layout = createChartLayout(payload);
-  const { padding, plotHeight } = layout.cartesian;
-  const chartBodyWidth = layout.contentWidth;
-  const height = layout.contentHeight;
   const seriesCount = Math.max(1, payload.seriesNames.length);
   const rows = payload.rows.map((row) => ({
     label: row.label,
     values: row.values
       .slice(0, seriesCount)
-      .map((value) => getFiniteNumber(value, 0)),
+      .map((value) => Math.max(0, getFiniteNumber(value, 0))),
   }));
-  const niceMax = niceCeil(getLargestValue(rows.map((row) => row.values)));
-  const yAxisLabelAreaWidth = payload.yLabel
-    ? layout.cartesian.yAxisTitleGutterWidth
-    : 0;
-  const yAxisTickLabelsWidth = payload.showAxisLabels
+  const niceMax = Math.max(
+    1,
+    niceCeil(getLargestValue(rows.map((row) => row.values))),
+  );
+  const chartWidth = layout.outerWidth;
+  const chartPadding = { top: 32, right: 32, bottom: 32, left: 32 };
+  const plotHeight =
+    resolveChartSize(payload.chartSize).preset === "mobile-4" ? 220 : 280;
+  const titleHeight = payload.title ? TEXT_STYLES.title.lineHeight : 0;
+  const titleGap = payload.title ? 32 : 0;
+  const yAxisTitleWidth = payload.yLabel ? TEXT_STYLES.axisTitle.lineHeight : 0;
+  const yAxisTitleGap = payload.yLabel ? 16 : 0;
+  const yTickLabelGap = payload.showAxisLabels ? 8 : 0;
+  const yTickLabelWidth = payload.showAxisLabels
     ? getLineYAxisTickLabelsWidth(payload, niceMax)
     : 0;
-  const yAxisLabelGap = payload.yLabel ? LABEL_TO_CHART_GAP : 0;
-  const yAxisTicksGap = payload.showAxisLabels ? LABEL_TO_CHART_GAP : 0;
-  const calculatedPlotWidth =
-    chartBodyWidth -
-    yAxisLabelAreaWidth -
-    yAxisLabelGap -
-    yAxisTickLabelsWidth -
-    yAxisTicksGap;
-  const plotWidth = Math.max(GRID * 10, Math.floor(calculatedPlotWidth));
-  const colors = PALETTES[payload.palette].map(hexToRgb);
-  const { frame, contentFrame } = await runChartStep(
-    "creating outer frame",
-    () => createBaseFrame(payload, "ChartStudio Line Chart", layout),
+  const plotLeft =
+    chartPadding.left +
+    yAxisTitleWidth +
+    yAxisTitleGap +
+    yTickLabelWidth +
+    yTickLabelGap;
+  const plotRight = chartWidth - chartPadding.right;
+  const plotWidth = Math.max(GRID * 10, plotRight - plotLeft);
+  const plotTop = chartPadding.top + titleHeight + titleGap;
+  const plotBottom = plotTop + plotHeight;
+  const xTickLabelGap = payload.showAxisLabels ? 12 : 0;
+  const xTickLabelHeight = payload.showAxisLabels ? 18 : 0;
+  const xAxisTitleGap = payload.xLabel ? 16 : 0;
+  const xAxisTitleHeight = payload.xLabel
+    ? TEXT_STYLES.axisTitle.lineHeight
+    : 0;
+  const legendHeight = payload.showLegend && seriesCount > 1 ? 24 : 0;
+  const chartHeight =
+    chartPadding.top +
+    titleHeight +
+    titleGap +
+    plotHeight +
+    xTickLabelGap +
+    xTickLabelHeight +
+    xAxisTitleGap +
+    xAxisTitleHeight +
+    legendHeight +
+    chartPadding.bottom;
+
+  const { frame, contentFrame } = await createBaseFrame(
+    payload,
+    "ChartStudio Line Chart",
+    layout,
   );
   frame.name = "ChartStudio Chart";
+  contentFrame.layoutMode = "NONE";
+  if (contentFrame.resize) contentFrame.resize(chartWidth, chartHeight);
+  if (frame.resize) frame.resize(chartWidth, chartHeight);
 
-  try {
-    const chartBodyFrame = await runChartStep("creating Chart Body", () =>
-      createChartSectionFrame(
-        "Chart Body",
-        chartBodyWidth,
-        layout.cartesian.chartAreaHeight,
+  const chartBody = createTransparentFrame(
+    "Chart Body",
+    0,
+    0,
+    chartWidth,
+    chartHeight,
+  );
+  contentFrame.appendChild(chartBody);
+  const plotArea = createTransparentFrame(
+    "Plot area",
+    plotLeft,
+    plotTop,
+    plotWidth,
+    plotHeight,
+  );
+  chartBody.appendChild(plotArea);
+
+  const getX = (index: number, totalPoints: number) =>
+    plotLeft + (totalPoints <= 1 ? 0 : index / (totalPoints - 1)) * plotWidth;
+  const getY = (value: number) =>
+    plotBottom - ((value - 0) / (niceMax - 0)) * plotHeight;
+
+  drawGridAndAxes(
+    plotArea,
+    payload,
+    { top: 0, left: 0, right: 0, bottom: 0 },
+    plotWidth,
+    plotHeight,
+    niceMax,
+  );
+  const colors = PALETTES[payload.palette].map(hexToRgb);
+  for (let seriesIndex = 0; seriesIndex < seriesCount; seriesIndex += 1) {
+    const seriesName = getSeriesName(payload.seriesNames, seriesIndex);
+    const points = rows.map((row, rowIndex) =>
+      sanitizeChartPoint({
+        x: getX(rowIndex, rows.length) - plotLeft,
+        y: getY(row.values[seriesIndex]) - plotTop,
+        value: row.values[seriesIndex],
+        label: row.label,
+      }),
+    );
+    const lineStyle = getLineStyle(payload, seriesIndex, seriesCount);
+    const linePath = payload.smooth ? smoothPath(points) : straightPath(points);
+    const lineWeight = Math.max(1, getFiniteNumber(payload.lineWeight, 1));
+    const lineColor = colors[seriesIndex % colors.length];
+    plotArea.appendChild(
+      createVectorPath(
+        `${seriesName} Line`,
+        linePath,
+        lineColor,
+        lineWeight,
+        lineStyle,
       ),
     );
-    chartBodyFrame.layoutMode = "HORIZONTAL";
-    chartBodyFrame.primaryAxisSizingMode = "FIXED";
-    chartBodyFrame.counterAxisSizingMode = "FIXED";
-    chartBodyFrame.primaryAxisAlignItems = "MIN";
-    chartBodyFrame.counterAxisAlignItems = "MIN";
-    chartBodyFrame.itemSpacing = LABEL_TO_CHART_GAP;
-
-    const chartAreaFrame = await runChartStep("creating Plot area", () =>
-      createTransparentFrame(
-        "Plot area",
-        0,
-        padding.top,
-        plotWidth,
-        plotHeight,
-      ),
-    );
-    contentFrame.appendChild(chartBodyFrame);
-
-    drawGridAndAxes(
-      chartAreaFrame,
-      payload,
-      { top: 0, left: 0, right: 0, bottom: 0 },
-      plotWidth,
-      plotHeight,
-      niceMax,
-    );
-
-    for (let seriesIndex = 0; seriesIndex < seriesCount; seriesIndex += 1) {
-      const seriesName = getSeriesName(payload.seriesNames, seriesIndex);
-      const points = rows.map((row, rowIndex) => {
-        const value = getFiniteNumber(row.values[seriesIndex], 0);
-        const x = getXForCategory(rowIndex, rows.length, 0, plotWidth);
-        const y = getYForValue(Math.max(0, value), 0, niceMax, 0, plotHeight);
-        return sanitizeChartPoint({ x, y, value, label: row.label });
-      });
-
-      const lineStyle = getLineStyle(payload, seriesIndex, seriesCount);
-      const linePath = payload.smooth
-        ? smoothPath(points)
-        : straightPath(points);
-      const lineWeight = Math.max(1, getFiniteNumber(payload.lineWeight, 1));
-      const lineColor = colors[seriesIndex % colors.length];
-
-      if (lineStyle.double) {
-        const offset = lineWeight / 2 + 0.5;
-        chartAreaFrame.appendChild(
-          withConstraints(
-            createVectorPath(
-              `${seriesName} Line · upper`,
-              offsetPath(linePath, -offset),
-              lineColor,
-              lineWeight,
-              lineStyle,
-            ),
-            "SCALE",
-            "SCALE",
+    if (payload.showPoints)
+      points.forEach((point) =>
+        plotArea.appendChild(
+          createLinePointMarker(
+            `${seriesName} data point · ${point.label}`,
+            point.x,
+            point.y,
+            lineColor,
           ),
-        );
-        chartAreaFrame.appendChild(
-          withConstraints(
-            createVectorPath(
-              `${seriesName} Line · lower`,
-              offsetPath(linePath, offset),
-              lineColor,
-              lineWeight,
-              lineStyle,
-            ),
-            "SCALE",
-            "SCALE",
-          ),
-        );
-      } else {
-        chartAreaFrame.appendChild(
-          withConstraints(
-            createVectorPath(
-              `${seriesName} Line`,
-              linePath,
-              lineColor,
-              lineWeight,
-              lineStyle,
-            ),
-            "SCALE",
-            "SCALE",
-          ),
-        );
-      }
-
-      if (payload.showPoints) {
-        points.forEach((point) => {
-          chartAreaFrame.appendChild(
-            createLinePointMarker(
-              `${seriesName} data point · ${point.label}`,
-              point.x,
-              point.y,
-              colors[seriesIndex % colors.length],
-            ),
-          );
-          if (payload.showValues) {
-            chartAreaFrame.appendChild(
-              withConstraints(
-                createText(
-                  formatChartValue(
-                    point.value,
-                    getValueFormatterConfig(payload),
-                  ),
-                  10,
-                  FONT_MEDIUM,
-                  COLORS.mutedText,
-                  point.x - 30,
-                  Math.max(0, point.y - 24),
-                  60,
-                  14,
-                  "CENTER",
-                ),
-                "SCALE",
-                "SCALE",
-              ),
-            );
-          }
-        });
-      }
-    }
-
-    const yAxisFrame = await runChartStep("creating Y Axis", () =>
-      withConstraints(
-        createAutoLayoutFrame(
-          "Y Axis",
-          0,
-          padding.top,
-          "HORIZONTAL",
-          LABEL_TO_CHART_GAP,
-          "AUTO",
-          "AUTO",
-        ),
-        "MIN",
-        "MIN",
-      ),
-    );
-    yAxisFrame.primaryAxisAlignItems = "MIN";
-    yAxisFrame.counterAxisAlignItems = "CENTER";
-    yAxisFrame.itemSpacing = LABEL_TO_CHART_GAP;
-    if (payload.yLabel) {
-      const yAxisLabel = createAutoLayoutFrame(
-        "Y axis label",
-        0,
-        0,
-        "VERTICAL",
-        0,
-        "AUTO",
-        "AUTO",
-      );
-      yAxisLabel.primaryAxisAlignItems = "CENTER";
-      yAxisLabel.counterAxisAlignItems = "CENTER";
-      const yAxisLabelText = createText(
-        payload.yLabel,
-        TEXT_STYLES.axisTitle.fontSize,
-        TEXT_STYLES.axisTitle.font,
-        COLORS.text,
-        0,
-        0,
-        1,
-        TEXT_STYLES.axisTitle.lineHeight,
-        "CENTER",
-      );
-      (
-        yAxisLabelText as TextNode & { textAutoResize?: "WIDTH_AND_HEIGHT" }
-      ).textAutoResize = "WIDTH_AND_HEIGHT";
-      yAxisLabelText.rotation = -90;
-      yAxisLabel.appendChild(yAxisLabelText);
-      if (yAxisLabel.resize) {
-        yAxisLabel.resize(
-          yAxisLabelAreaWidth,
-          layout.cartesian.chartAreaHeight,
-        );
-      }
-      yAxisFrame.appendChild(yAxisLabel);
-    }
-    const yAxisTickLabelsArea = createAutoLayoutFrame(
-      "Y axis tick labels area",
-      0,
-      0,
-      "VERTICAL",
-      0,
-      "AUTO",
-      "AUTO",
-    );
-    yAxisTickLabelsArea.primaryAxisAlignItems = "MIN";
-    yAxisTickLabelsArea.counterAxisAlignItems = "MAX";
-    if (yAxisTickLabelsArea.resize) {
-      yAxisTickLabelsArea.resize(
-        yAxisTickLabelsWidth,
-        layout.cartesian.chartAreaHeight,
-      );
-    }
-    yAxisFrame.appendChild(yAxisTickLabelsArea);
-
-    const yAxisTickLabels = drawYAxisTickLabels(
-      yAxisTickLabelsArea,
-      payload,
-      { top: 0, left: 0, right: 0, bottom: 0 },
-      plotHeight,
-      niceMax,
-    );
-    if (yAxisTickLabels) {
-      yAxisTickLabels.x = 0;
-      yAxisTickLabels.y = 0;
-    }
-    chartBodyFrame.appendChild(yAxisFrame);
-    chartBodyFrame.appendChild(chartAreaFrame);
-
-    const xAxisFrame = await runChartStep("creating X Axis labels", () =>
-      withConstraints(
-        createAutoLayoutFrame(
-          "X Axis labels",
-          0,
-          0,
-          "VERTICAL",
-          LABEL_TO_CHART_GAP,
-          "FIXED",
-          "AUTO",
-        ),
-        "STRETCH",
-        "MIN",
-      ),
-    );
-    xAxisFrame.primaryAxisAlignItems = "MIN";
-    xAxisFrame.counterAxisAlignItems = "CENTER";
-    if (xAxisFrame.resize) xAxisFrame.resize(plotWidth, 1);
-    drawXAxisCategoryLabels(
-      xAxisFrame,
-      payload,
-      rows,
-      { top: 0, left: 0, right: 0, bottom: 0 },
-      plotWidth,
-      0,
-    );
-    if (payload.xLabel) {
-      const xAxisLabel = createAutoLayoutFrame(
-        "X axis label",
-        0,
-        0,
-        "HORIZONTAL",
-        0,
-        "AUTO",
-        "AUTO",
-      );
-      xAxisLabel.primaryAxisAlignItems = "CENTER";
-      xAxisLabel.counterAxisAlignItems = "CENTER";
-      const xAxisLabelText = createText(
-        payload.xLabel,
-        TEXT_STYLES.axisTitle.fontSize,
-        TEXT_STYLES.axisTitle.font,
-        COLORS.text,
-        0,
-        0,
-        1,
-        TEXT_STYLES.axisTitle.lineHeight,
-        "CENTER",
-      );
-      (
-        xAxisLabelText as TextNode & { textAutoResize?: "WIDTH_AND_HEIGHT" }
-      ).textAutoResize = "WIDTH_AND_HEIGHT";
-      xAxisLabel.appendChild(xAxisLabelText);
-      xAxisFrame.appendChild(xAxisLabel);
-    }
-    contentFrame.appendChild(xAxisFrame);
-
-    if (payload.showLegend && seriesCount > 1) {
-      const legendSection = await runChartStep("creating Chart Legend", () =>
-        createChartSectionFrame(
-          "Chart Legend",
-          layout.contentWidth,
-          layout.cartesian.legendHeight || 24,
         ),
       );
-      drawLegend(legendSection, payload, padding, plotWidth, height, layout);
-      contentFrame.appendChild(legendSection);
-    }
-
-    finalizeChartFrame(frame, layout);
-    return frame;
-  } catch (error) {
-    if (frame.remove) frame.remove();
-    throw error;
   }
+
+  if (payload.showAxisLabels) {
+    const yTicks = createTransparentFrame(
+      "Y axis tick labels",
+      0,
+      0,
+      Math.max(1, yTickLabelWidth),
+      plotHeight,
+    );
+    chartBody.appendChild(yTicks);
+    for (let i = 4; i >= 0; i -= 1) {
+      const v = (niceMax / 4) * i;
+      const t = createText(
+        formatAxisTickCompact(v, payload),
+        11,
+        FONT_REGULAR,
+        COLORS.mutedText,
+        0,
+        0,
+        1,
+        18,
+        "RIGHT",
+      );
+      (t as TextNode & { textAutoResize?: "WIDTH_AND_HEIGHT" }).textAutoResize =
+        "WIDTH_AND_HEIGHT";
+      const tw = (t as TextNode & { width: number }).width;
+      const th = (t as TextNode & { height: number }).height;
+      t.x = plotLeft - yTickLabelGap - tw;
+      t.y = getY(v) - th / 2;
+      chartBody.appendChild(t);
+    }
+    rows.forEach((row, idx) => {
+      const t = createText(
+        row.label,
+        11,
+        FONT_REGULAR,
+        COLORS.mutedText,
+        0,
+        0,
+        1,
+        18,
+        "CENTER",
+      );
+      (t as TextNode & { textAutoResize?: "WIDTH_AND_HEIGHT" }).textAutoResize =
+        "WIDTH_AND_HEIGHT";
+      const tw = (t as TextNode & { width: number }).width;
+      t.x = getX(idx, rows.length) - tw / 2;
+      t.y = plotBottom + xTickLabelGap;
+      chartBody.appendChild(t);
+    });
+  }
+
+  if (payload.yLabel) {
+    const yTitle = createText(
+      payload.yLabel,
+      TEXT_STYLES.axisTitle.fontSize,
+      TEXT_STYLES.axisTitle.font,
+      COLORS.text,
+      0,
+      0,
+      1,
+      TEXT_STYLES.axisTitle.lineHeight,
+      "CENTER",
+    );
+    (
+      yTitle as TextNode & { textAutoResize?: "WIDTH_AND_HEIGHT" }
+    ).textAutoResize = "WIDTH_AND_HEIGHT";
+    yTitle.rotation = -90;
+    const yh = (yTitle as TextNode & { height: number }).height;
+    yTitle.x = chartPadding.left;
+    yTitle.y = plotTop + plotHeight / 2 + yh / 2;
+    chartBody.appendChild(yTitle);
+  }
+  if (payload.xLabel) {
+    const xTitle = createText(
+      payload.xLabel,
+      TEXT_STYLES.axisTitle.fontSize,
+      TEXT_STYLES.axisTitle.font,
+      COLORS.text,
+      0,
+      0,
+      1,
+      TEXT_STYLES.axisTitle.lineHeight,
+      "CENTER",
+    );
+    (
+      xTitle as TextNode & { textAutoResize?: "WIDTH_AND_HEIGHT" }
+    ).textAutoResize = "WIDTH_AND_HEIGHT";
+    const tw = (xTitle as TextNode & { width: number }).width;
+    const xAxisTitleY =
+      plotBottom + xTickLabelGap + xTickLabelHeight + xAxisTitleGap;
+    xTitle.x = plotLeft + plotWidth / 2 - tw / 2;
+    xTitle.y = xAxisTitleY;
+    chartBody.appendChild(xTitle);
+  }
+  if (payload.showLegend && seriesCount > 1) {
+    const legend = createChartSectionFrame(
+      "Chart Legend",
+      chartWidth,
+      legendHeight || 24,
+    );
+    drawLegend(
+      legend,
+      payload,
+      { top: 0, left: 0, right: 0, bottom: 0 },
+      plotWidth,
+      chartHeight,
+      layout,
+    );
+    legend.x = 0;
+    legend.y =
+      plotBottom +
+      xTickLabelGap +
+      xTickLabelHeight +
+      xAxisTitleGap +
+      xAxisTitleHeight;
+    chartBody.appendChild(legend);
+  }
+
+  return frame;
 }
 
 async function createEditableDoughnutChart(
