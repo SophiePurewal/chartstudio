@@ -441,7 +441,7 @@ function validateChartSize(
 
 function createChartLayout(payload: ChartPayload): ChartLayout {
   const size = resolveChartSize(payload.chartSize);
-  const contentWidth = size.width - CHART_FRAME_PADDING * 2;
+  const contentWidth = size.width;
   const compact = size.width <= 420;
   const sectionSpacing = getChartSectionSpacing(payload);
   const contentHeight = Math.max(
@@ -569,10 +569,7 @@ function createChartLayout(payload: ChartPayload): ChartLayout {
     labelsHeight +
     legendSectionHeight +
     Math.max(0, sectionCount - 1) * sectionSpacing;
-  const outerHeight = Math.max(
-    CHART_FRAME_PADDING * 2 + 1,
-    contentFrameHeight + CHART_FRAME_PADDING * 2,
-  );
+  const outerHeight = Math.max(1, contentFrameHeight);
 
   return {
     outerWidth: size.width,
@@ -622,12 +619,7 @@ function getLineChartLegendSpacing(): number {
 }
 
 function finalizeChartFrame(frame: FrameNode, layout: ChartLayout): void {
-  const finalHeight = Math.ceil(
-    Math.max(
-      CHART_FRAME_PADDING * 2 + 1,
-      layout.contentFrameHeight + CHART_FRAME_PADDING * 2,
-    ),
-  );
+  const finalHeight = Math.ceil(Math.max(1, layout.contentFrameHeight));
   if (frame.resize) frame.resize(layout.outerWidth, finalHeight);
 }
 
@@ -660,10 +652,10 @@ async function createBaseFrame(
 
   const contentFrame = figma.createFrame();
   contentFrame.name = "Chart content";
-  contentFrame.x = CHART_FRAME_PADDING;
-  contentFrame.y = CHART_FRAME_PADDING;
+  contentFrame.x = 0;
+  contentFrame.y = 0;
   if (contentFrame.resize) {
-    contentFrame.resize(layout.contentWidth, layout.contentFrameHeight);
+    contentFrame.resize(layout.outerWidth, layout.outerHeight);
   }
   contentFrame.fills = [];
   contentFrame.clipsContent = false;
@@ -788,7 +780,23 @@ async function createEditableLineChart(
   payload: ChartPayload,
 ): Promise<FrameNode> {
   const layout = createChartLayout(payload);
-  const { padding, plotWidth, plotHeight } = layout.cartesian;
+  const { padding, plotHeight } = layout.cartesian;
+  const chartBodyWidth = layout.contentWidth;
+  const yAxisLabelAreaWidth = payload.yLabel
+    ? layout.cartesian.yAxisTitleGutterWidth
+    : 0;
+  const yAxisTickLabelsWidth = payload.showAxisLabels
+    ? layout.cartesian.yAxisTickLabelGutterWidth
+    : 0;
+  const yAxisLabelGap = payload.yLabel ? LABEL_TO_CHART_GAP : 0;
+  const yAxisTicksGap = payload.showAxisLabels ? LABEL_TO_CHART_GAP : 0;
+  const calculatedPlotWidth =
+    chartBodyWidth -
+    yAxisLabelAreaWidth -
+    yAxisLabelGap -
+    yAxisTickLabelsWidth -
+    yAxisTicksGap;
+  const plotWidth = Math.max(GRID * 10, Math.floor(calculatedPlotWidth));
   const height = layout.contentHeight;
   const seriesCount = Math.max(1, payload.seriesNames.length);
   const rows = payload.rows.map((row) => ({
@@ -809,7 +817,7 @@ async function createEditableLineChart(
   try {
     const chartBodyFrame = createChartSectionFrame(
       "Chart Body",
-      layout.contentWidth,
+      chartBodyWidth,
       layout.cartesian.chartAreaHeight,
     );
     const chartAreaFrame = createTransparentFrame(
@@ -831,13 +839,13 @@ async function createEditableLineChart(
       niceMax,
     );
 
-    const denominator = Math.max(rows.length - 1, 1);
     for (let seriesIndex = 0; seriesIndex < seriesCount; seriesIndex += 1) {
       const seriesName = getSeriesName(payload.seriesNames, seriesIndex);
+      const denominator = Math.max(rows.length - 1, 1);
       const points = rows.map((row, rowIndex) => {
         const value = getFiniteNumber(row.values[seriesIndex], 0);
-        const x = (plotWidth * rowIndex) / denominator;
-        const y = plotHeight - (Math.max(0, value) / niceMax) * plotHeight;
+        const x = getXForCategory(rowIndex, denominator, 0, plotWidth);
+        const y = getYForValue(Math.max(0, value), 0, niceMax, 0, plotHeight);
         return sanitizeChartPoint({ x, y, value, label: row.label });
       });
 
@@ -1219,7 +1227,7 @@ function drawGridAndAxes(
   const steps = 4;
   for (let index = 0; index <= steps; index += 1) {
     const value = (niceMax / steps) * index;
-    const y = padding.top + plotHeight - (plotHeight * index) / steps;
+    const y = getYForValue(value, 0, niceMax, padding.top, plotHeight);
     if (payload.showGrid && index > 0) {
       frame.appendChild(
         withConstraints(
@@ -1398,7 +1406,7 @@ function drawXAxisTicks(
   if (payload.type !== "line" || !payload.showAxisTicks) return;
   const denominator = Math.max(rows.length - 1, 1);
   rows.forEach((_row, rowIndex) => {
-    const x = padding.left + (plotWidth * rowIndex) / denominator;
+    const x = getXForCategory(rowIndex, denominator, padding.left, plotWidth);
     frame.appendChild(
       withConstraints(
         createLinePath(
@@ -1427,38 +1435,25 @@ function drawYAxisTickLabels(
   if (!payload.showAxisLabels) return;
   const steps = 4;
   const labelColumn = withConstraints(
-    createAutoLayoutFrame(
-      "Y axis tick labels",
-      0,
-      padding.top,
-      "VERTICAL",
-      0,
-      "AUTO",
-      "AUTO",
-    ),
+    createTransparentFrame("Y axis tick labels", 0, padding.top, 1, plotHeight),
     "MIN",
     "MIN",
   );
-  labelColumn.primaryAxisAlignItems = "SPACE_BETWEEN";
-  labelColumn.counterAxisAlignItems = "MAX";
-
-  for (let index = steps; index >= 0; index -= 1) {
+  const tickLabels: FrameNode[] = [];
+  let maxTickWidth = 0;
+  for (let index = 0; index <= steps; index += 1) {
     const value = (niceMax / steps) * index;
     const axisLabelValue =
       payload.type === "line"
         ? formatAxisTickCompact(value, payload)
         : formatChartValue(value, getValueFormatterConfig(payload));
-    const tickLabel = createAutoLayoutFrame(
+    const tickLabel = createTransparentFrame(
       `Y tick label ${steps - index + 1}`,
       0,
       0,
-      "HORIZONTAL",
-      0,
-      "AUTO",
-      "AUTO",
+      1,
+      1,
     );
-    tickLabel.counterAxisAlignItems = "CENTER";
-    tickLabel.primaryAxisAlignItems = "MIN";
     const tickText = createText(
       axisLabelValue,
       11,
@@ -1475,15 +1470,23 @@ function drawYAxisTickLabels(
     ).textAutoResize = "WIDTH_AND_HEIGHT";
     tickText.textAlignHorizontal = "RIGHT";
     tickLabel.appendChild(tickText);
+    const tickWidth = (tickText as TextNode & { width: number }).width;
+    const tickHeight = (tickText as TextNode & { height: number }).height;
+    if (tickLabel.resize) tickLabel.resize(tickWidth, tickHeight);
+    const tickY =
+      getYForValue(value, 0, niceMax, 0, plotHeight) - tickHeight / 2;
+    tickLabel.y = tickY;
+    maxTickWidth = Math.max(maxTickWidth, tickWidth);
     labelColumn.appendChild(tickLabel);
+    tickLabels.push(tickLabel);
   }
 
-  const labelColumnWidth = (labelColumn as FrameNode & { width: number }).width;
-  if (labelColumn.resize) labelColumn.resize(labelColumnWidth, plotHeight);
-  labelColumn.x = Math.max(
-    0,
-    padding.left - labelColumnWidth - LABEL_TO_CHART_GAP,
-  );
+  tickLabels.forEach((tick) => {
+    const tickWidth = (tick as FrameNode & { width: number }).width;
+    tick.x = Math.max(0, maxTickWidth - tickWidth);
+  });
+  if (labelColumn.resize) labelColumn.resize(maxTickWidth, plotHeight);
+  labelColumn.x = Math.max(0, padding.left - maxTickWidth - LABEL_TO_CHART_GAP);
   frame.appendChild(labelColumn);
   return labelColumn;
 }
@@ -1498,34 +1501,26 @@ function drawXAxisCategoryLabels(
 ) {
   if (!payload.showAxisLabels) return;
   const xAxisTickLabels = withConstraints(
-    createAutoLayoutFrame(
+    createTransparentFrame(
       "X axis tick labels",
       padding.left,
       padding.top + plotHeight + LABEL_TO_CHART_GAP,
-      "HORIZONTAL",
-      0,
-      "AUTO",
-      "AUTO",
+      plotWidth,
+      18,
     ),
     "MIN",
     "MIN",
   );
-  xAxisTickLabels.counterAxisAlignItems = "MIN";
-  xAxisTickLabels.primaryAxisAlignItems = "SPACE_BETWEEN";
-  if (xAxisTickLabels.resize) xAxisTickLabels.resize(plotWidth, 1);
   const denominator = Math.max(rows.length - 1, 1);
+  let maxLabelHeight = 18;
   rows.forEach((row, rowIndex) => {
-    const tickLabel = createAutoLayoutFrame(
+    const tickLabel = createTransparentFrame(
       `X tick label ${rowIndex + 1}`,
       0,
       0,
-      "HORIZONTAL",
-      0,
-      "AUTO",
-      "AUTO",
+      1,
+      1,
     );
-    tickLabel.counterAxisAlignItems = "CENTER";
-    tickLabel.primaryAxisAlignItems = "CENTER";
     const tickText = createText(
       row.label,
       11,
@@ -1542,24 +1537,43 @@ function drawXAxisCategoryLabels(
     ).textAutoResize = "WIDTH_AND_HEIGHT";
     tickText.textAlignHorizontal = "CENTER";
     tickLabel.appendChild(tickText);
+    const tickWidth = (tickText as TextNode & { width: number }).width;
+    const tickHeight = (tickText as TextNode & { height: number }).height;
+    if (tickLabel.resize) tickLabel.resize(tickWidth, tickHeight);
+    const centerX = getXForCategory(rowIndex, denominator, 0, plotWidth);
+    tickLabel.x = Math.max(
+      0,
+      Math.min(plotWidth - tickWidth, centerX - tickWidth / 2),
+    );
+    tickLabel.y = 0;
+    maxLabelHeight = Math.max(maxLabelHeight, tickHeight);
     xAxisTickLabels.appendChild(tickLabel);
-    if (rowIndex === 0 || rowIndex === rows.length - 1) {
-      setAbsoluteIfAllowed(tickLabel);
-      const centerX = (plotWidth * rowIndex) / denominator;
-      tickLabel.x = Math.max(
-        0,
-        Math.min(
-          plotWidth - (tickLabel as FrameNode & { width: number }).width,
-          centerX - (tickLabel as FrameNode & { width: number }).width / 2,
-        ),
-      );
-      tickLabel.y = 0;
-    } else {
-      (tickLabel as FrameNode & { layoutGrow: number }).layoutGrow = 1;
-    }
   });
+  if (xAxisTickLabels.resize) xAxisTickLabels.resize(plotWidth, maxLabelHeight);
   frame.appendChild(xAxisTickLabels);
   return xAxisTickLabels;
+}
+
+function getXForCategory(
+  index: number,
+  denominator: number,
+  plotLeft: number,
+  plotWidth: number,
+): number {
+  const safeDenominator = Math.max(denominator, 1);
+  return plotLeft + (plotWidth * index) / safeDenominator;
+}
+
+function getYForValue(
+  value: number,
+  minValue: number,
+  maxValue: number,
+  plotTop: number,
+  plotHeight: number,
+): number {
+  const span = Math.max(maxValue - minValue, 1);
+  const normalized = (value - minValue) / span;
+  return plotTop + plotHeight - normalized * plotHeight;
 }
 
 function drawAxisLabels(
