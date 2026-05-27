@@ -254,6 +254,30 @@ type ChartLayout = {
   };
 };
 
+class ChartCreationError extends Error {
+  step: string;
+  cause?: unknown;
+
+  constructor(step: string, cause: unknown) {
+    const causeMessage = cause instanceof Error ? cause.message : String(cause);
+    super(`Failed during step "${step}": ${causeMessage}`);
+    this.name = "ChartCreationError";
+    this.step = step;
+    this.cause = cause;
+  }
+}
+
+async function runChartStep<T>(
+  step: string,
+  fn: () => T | Promise<T>,
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    throw new ChartCreationError(step, error);
+  }
+}
+
 figma.showUI(__html__, { width: 440, height: 760, themeColors: true });
 
 figma.ui.onmessage = async (message) => {
@@ -288,7 +312,11 @@ figma.ui.onmessage = async (message) => {
     figma.ui.postMessage({ type: "chart-created" });
   } catch (error) {
     if (chart?.remove) chart.remove();
-    globalThis.console?.error("Chart creation failed", error);
+    globalThis.console?.error("Chart creation failed", {
+      error,
+      chartType: message.payload.type,
+      step: error instanceof ChartCreationError ? error.step : "unknown",
+    });
     if (error instanceof Error && error.stack) {
       globalThis.console?.error(error.stack);
     }
@@ -650,21 +678,24 @@ async function createBaseFrame(
   frame.fills = [];
   frame.clipsContent = false;
 
-  const contentFrame = figma.createFrame();
-  contentFrame.name = "Chart content";
-  contentFrame.x = 0;
-  contentFrame.y = 0;
-  if (contentFrame.resize) {
-    contentFrame.resize(layout.outerWidth, layout.outerHeight);
-  }
-  contentFrame.fills = [];
-  contentFrame.clipsContent = false;
-  contentFrame.layoutMode = "VERTICAL";
-  contentFrame.itemSpacing = getChartSectionSpacing(payload);
-  contentFrame.primaryAxisSizingMode = "AUTO";
-  contentFrame.counterAxisSizingMode = "FIXED";
-  setConstraints(contentFrame, "MIN", "MIN");
-  frame.appendChild(contentFrame);
+  const contentFrame = await runChartStep("creating Chart content", () => {
+    const nextContentFrame = figma.createFrame();
+    nextContentFrame.name = "Chart content";
+    nextContentFrame.x = 0;
+    nextContentFrame.y = 0;
+    if (nextContentFrame.resize) {
+      nextContentFrame.resize(layout.outerWidth, layout.outerHeight);
+    }
+    nextContentFrame.fills = [];
+    nextContentFrame.clipsContent = false;
+    nextContentFrame.layoutMode = "VERTICAL";
+    nextContentFrame.itemSpacing = getChartSectionSpacing(payload);
+    nextContentFrame.primaryAxisSizingMode = "AUTO";
+    nextContentFrame.counterAxisSizingMode = "FIXED";
+    setConstraints(nextContentFrame, "MIN", "MIN");
+    frame.appendChild(nextContentFrame);
+    return nextContentFrame;
+  });
 
   if (payload.title) {
     const title = createText(
@@ -807,25 +838,28 @@ async function createEditableLineChart(
   }));
   const niceMax = niceCeil(getLargestValue(rows.map((row) => row.values)));
   const colors = PALETTES[payload.palette].map(hexToRgb);
-  const { frame, contentFrame } = await createBaseFrame(
-    payload,
-    "ChartStudio Line Chart",
-    layout,
+  const { frame, contentFrame } = await runChartStep(
+    "creating outer frame",
+    () => createBaseFrame(payload, "ChartStudio Line Chart", layout),
   );
   frame.name = "ChartStudio Chart";
 
   try {
-    const chartBodyFrame = createChartSectionFrame(
-      "Chart Body",
-      chartBodyWidth,
-      layout.cartesian.chartAreaHeight,
+    const chartBodyFrame = await runChartStep("creating Chart Body", () =>
+      createChartSectionFrame(
+        "Chart Body",
+        chartBodyWidth,
+        layout.cartesian.chartAreaHeight,
+      ),
     );
-    const chartAreaFrame = createTransparentFrame(
-      "Plot area",
-      padding.left,
-      padding.top,
-      plotWidth,
-      plotHeight,
+    const chartAreaFrame = await runChartStep("creating Plot area", () =>
+      createTransparentFrame(
+        "Plot area",
+        padding.left,
+        padding.top,
+        plotWidth,
+        plotHeight,
+      ),
     );
     contentFrame.appendChild(chartBodyFrame);
     chartBodyFrame.appendChild(chartAreaFrame);
@@ -935,18 +969,20 @@ async function createEditableLineChart(
       }
     }
 
-    const yAxisFrame = withConstraints(
-      createAutoLayoutFrame(
-        "Y Axis",
-        0,
-        padding.top,
-        "HORIZONTAL",
-        LABEL_TO_CHART_GAP,
-        "AUTO",
-        "AUTO",
+    const yAxisFrame = await runChartStep("creating Y Axis", () =>
+      withConstraints(
+        createAutoLayoutFrame(
+          "Y Axis",
+          0,
+          padding.top,
+          "HORIZONTAL",
+          LABEL_TO_CHART_GAP,
+          "AUTO",
+          "AUTO",
+        ),
+        "MIN",
+        "MIN",
       ),
-      "MIN",
-      "MIN",
     );
     yAxisFrame.primaryAxisAlignItems = "MIN";
     yAxisFrame.counterAxisAlignItems = "CENTER";
@@ -997,18 +1033,20 @@ async function createEditableLineChart(
       (yAxisFrame as FrameNode & { width: number }).width + LABEL_TO_CHART_GAP;
     chartAreaFrame.y = padding.top;
 
-    const xAxisFrame = withConstraints(
-      createAutoLayoutFrame(
-        "X Axis",
-        chartAreaFrame.x,
-        chartAreaFrame.y + plotHeight + LABEL_TO_CHART_GAP,
-        "VERTICAL",
-        LABEL_TO_CHART_GAP,
-        "AUTO",
-        "AUTO",
+    const xAxisFrame = await runChartStep("creating X Axis", () =>
+      withConstraints(
+        createAutoLayoutFrame(
+          "X Axis",
+          chartAreaFrame.x,
+          chartAreaFrame.y + plotHeight + LABEL_TO_CHART_GAP,
+          "VERTICAL",
+          LABEL_TO_CHART_GAP,
+          "AUTO",
+          "AUTO",
+        ),
+        "MIN",
+        "MIN",
       ),
-      "MIN",
-      "MIN",
     );
     xAxisFrame.primaryAxisAlignItems = "MIN";
     xAxisFrame.counterAxisAlignItems = "CENTER";
@@ -1052,10 +1090,12 @@ async function createEditableLineChart(
     chartBodyFrame.appendChild(xAxisFrame);
 
     if (payload.showLegend && seriesCount > 1) {
-      const legendSection = createChartSectionFrame(
-        "Chart Legend",
-        layout.contentWidth,
-        layout.cartesian.legendHeight || 24,
+      const legendSection = await runChartStep("creating Chart Legend", () =>
+        createChartSectionFrame(
+          "Chart Legend",
+          layout.contentWidth,
+          layout.cartesian.legendHeight || 24,
+        ),
       );
       drawLegend(legendSection, payload, padding, plotWidth, height, layout);
       contentFrame.appendChild(legendSection);
@@ -1480,7 +1520,6 @@ function drawYAxisTickLabels(
 
   const labelColumnWidth = (labelColumn as FrameNode & { width: number }).width;
   if (labelColumn.resize) labelColumn.resize(labelColumnWidth, plotHeight);
-  (labelColumn as FrameNode & { width: number }).width = labelColumnWidth;
   labelColumn.x = Math.max(
     0,
     padding.left - labelColumnWidth - LABEL_TO_CHART_GAP,
@@ -2398,7 +2437,10 @@ async function applyChartTitleTextStyle(
     return;
   }
 
-  titleNode.textStyleId = style.id;
+  globalThis.console?.warn(
+    "setTextStyleIdAsync is unavailable on this TextNode. Falling back to AXLE-safe typography.",
+  );
+  await applyFallbackTypography();
 }
 
 function createLine(
