@@ -835,7 +835,7 @@ function renderErrorPage() {
 let serverEntryPromise;
 async function getServerEntry() {
   if (!serverEntryPromise) {
-    serverEntryPromise = import("./server-CWbDfqm0.js").then((n) => n.Y).then(
+    serverEntryPromise = import("./server-B1VPNlIO.js").then((n) => n.Z).then(
       (m) => m.default ?? m
     );
   }

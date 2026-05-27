@@ -839,13 +839,12 @@ async function createEditableLineChart(
       niceMax,
     );
 
-    const denominator = Math.max(rows.length - 1, 1);
     for (let seriesIndex = 0; seriesIndex < seriesCount; seriesIndex += 1) {
       const seriesName = getSeriesName(payload.seriesNames, seriesIndex);
       const points = rows.map((row, rowIndex) => {
         const value = getFiniteNumber(row.values[seriesIndex], 0);
-        const x = (plotWidth * rowIndex) / denominator;
-        const y = plotHeight - (Math.max(0, value) / niceMax) * plotHeight;
+        const x = getXForCategory(rowIndex, rows.length, 0, plotWidth);
+        const y = getYForValue(Math.max(0, value), 0, niceMax, 0, plotHeight);
         return sanitizeChartPoint({ x, y, value, label: row.label });
       });
 
@@ -1227,7 +1226,7 @@ function drawGridAndAxes(
   const steps = 4;
   for (let index = 0; index <= steps; index += 1) {
     const value = (niceMax / steps) * index;
-    const y = padding.top + plotHeight - (plotHeight * index) / steps;
+    const y = getYForValue(value, 0, niceMax, padding.top, plotHeight);
     if (payload.showGrid && index > 0) {
       frame.appendChild(
         withConstraints(
@@ -1404,9 +1403,8 @@ function drawXAxisTicks(
   plotHeight: number,
 ) {
   if (payload.type !== "line" || !payload.showAxisTicks) return;
-  const denominator = Math.max(rows.length - 1, 1);
   rows.forEach((_row, rowIndex) => {
-    const x = padding.left + (plotWidth * rowIndex) / denominator;
+    const x = getXForCategory(rowIndex, rows.length, padding.left, plotWidth);
     frame.appendChild(
       withConstraints(
         createLinePath(
@@ -1435,20 +1433,10 @@ function drawYAxisTickLabels(
   if (!payload.showAxisLabels) return;
   const steps = 4;
   const labelColumn = withConstraints(
-    createAutoLayoutFrame(
-      "Y axis tick labels",
-      0,
-      padding.top,
-      "VERTICAL",
-      0,
-      "AUTO",
-      "AUTO",
-    ),
+    createTransparentFrame("Y axis tick labels", 0, padding.top, 1, plotHeight),
     "MIN",
     "MIN",
   );
-  labelColumn.primaryAxisAlignItems = "SPACE_BETWEEN";
-  labelColumn.counterAxisAlignItems = "MAX";
 
   for (let index = steps; index >= 0; index -= 1) {
     const value = (niceMax / steps) * index;
@@ -1484,10 +1472,15 @@ function drawYAxisTickLabels(
     tickText.textAlignHorizontal = "RIGHT";
     tickLabel.appendChild(tickText);
     labelColumn.appendChild(tickLabel);
+    const gridlineY = getYForValue(value, 0, niceMax, 0, plotHeight);
+    const tickLabelHeight = (tickLabel as FrameNode & { height: number })
+      .height;
+    tickLabel.y = gridlineY - tickLabelHeight / 2;
   }
 
   const labelColumnWidth = (labelColumn as FrameNode & { width: number }).width;
   if (labelColumn.resize) labelColumn.resize(labelColumnWidth, plotHeight);
+  (labelColumn as FrameNode & { width: number }).width = labelColumnWidth;
   labelColumn.x = Math.max(
     0,
     padding.left - labelColumnWidth - LABEL_TO_CHART_GAP,
@@ -1506,22 +1499,16 @@ function drawXAxisCategoryLabels(
 ) {
   if (!payload.showAxisLabels) return;
   const xAxisTickLabels = withConstraints(
-    createAutoLayoutFrame(
+    createTransparentFrame(
       "X axis tick labels",
       padding.left,
       padding.top + plotHeight + LABEL_TO_CHART_GAP,
-      "HORIZONTAL",
-      0,
-      "AUTO",
-      "AUTO",
+      plotWidth,
+      18,
     ),
     "MIN",
     "MIN",
   );
-  xAxisTickLabels.counterAxisAlignItems = "MIN";
-  xAxisTickLabels.primaryAxisAlignItems = "SPACE_BETWEEN";
-  if (xAxisTickLabels.resize) xAxisTickLabels.resize(plotWidth, 1);
-  const denominator = Math.max(rows.length - 1, 1);
   rows.forEach((row, rowIndex) => {
     const tickLabel = createAutoLayoutFrame(
       `X tick label ${rowIndex + 1}`,
@@ -1551,20 +1538,10 @@ function drawXAxisCategoryLabels(
     tickText.textAlignHorizontal = "CENTER";
     tickLabel.appendChild(tickText);
     xAxisTickLabels.appendChild(tickLabel);
-    if (rowIndex === 0 || rowIndex === rows.length - 1) {
-      setAbsoluteIfAllowed(tickLabel);
-      const centerX = (plotWidth * rowIndex) / denominator;
-      tickLabel.x = Math.max(
-        0,
-        Math.min(
-          plotWidth - (tickLabel as FrameNode & { width: number }).width,
-          centerX - (tickLabel as FrameNode & { width: number }).width / 2,
-        ),
-      );
-      tickLabel.y = 0;
-    } else {
-      (tickLabel as FrameNode & { layoutGrow: number }).layoutGrow = 1;
-    }
+    const centerX = getXForCategory(rowIndex, rows.length, 0, plotWidth);
+    const tickLabelWidth = (tickLabel as FrameNode & { width: number }).width;
+    tickLabel.x = centerX - tickLabelWidth / 2;
+    tickLabel.y = 0;
   });
   frame.appendChild(xAxisTickLabels);
   return xAxisTickLabels;
@@ -2528,6 +2505,31 @@ function sanitizeChartPoint(point: ChartPoint): ChartPoint {
     y: assertFiniteCoordinate(point.y, "line chart y coordinate"),
     value: getFiniteNumber(point.value, 0),
   };
+}
+
+function getXForCategory(
+  index: number,
+  totalPoints: number,
+  plotLeft: number,
+  plotWidth: number,
+): number {
+  const denominator = Math.max(totalPoints - 1, 1);
+  return plotLeft + (plotWidth * index) / denominator;
+}
+
+function getYForValue(
+  value: number,
+  minValue: number,
+  maxValue: number,
+  plotTop: number,
+  plotHeight: number,
+): number {
+  const safeMin = Number.isFinite(minValue) ? minValue : 0;
+  const safeMax = Number.isFinite(maxValue) ? maxValue : 1;
+  const range = Math.max(safeMax - safeMin, Number.EPSILON);
+  const clamped = Math.min(safeMax, Math.max(safeMin, value));
+  const ratio = (clamped - safeMin) / range;
+  return plotTop + plotHeight - ratio * plotHeight;
 }
 
 function getFiniteNumber(value: unknown, fallback: number): number {
