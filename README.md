@@ -172,8 +172,40 @@ The root manifest points Figma to the generated files in `dist/`.
 | `bun run build` | Build the web application |
 | `bun run build:plugin` | Build the Figma plugin controller and UI |
 | `bun run preview` | Preview the production web build |
+| `bun run typecheck` | Run the TypeScript compiler without emitting files |
 | `bun run lint` | Run ESLint |
+| `bun run test` | Run the Bun unit-test suite |
 | `bun run format` | Format the project with Prettier |
+| `bun run format:check` | Check formatting without changing files |
+| `bun run verify:plugin` | Validate the generated Figma artifact |
+| `bun run check` | Run the complete production quality gate |
+
+## Production quality and release checks
+
+ChartStudio includes an automated quality gate for pull requests and changes to `main`.
+
+Run the same checks locally with:
+
+```bash
+bun run check
+```
+
+The quality gate verifies:
+
+- Prettier formatting
+- TypeScript type safety
+- ESLint
+- unit tests for chart formatting and pattern generation
+- the production web build
+- the Figma plugin build
+- the generated Figma artifact, including inlined UI assets and a valid manifest
+- explicit Figma network isolation for a plugin that does not require external requests
+
+Tagged releases matching `v*` build and package a reproducible `chartstudio-figma-plugin.zip` artifact through GitHub Actions.
+
+### Publishing to Figma
+
+The repository currently uses a development plugin ID. Before publishing ChartStudio to the Figma Community, create/register the plugin in Figma and use the plugin ID assigned by Figma. The build and release workflow can then package the publishable artifact without changing the application architecture.
 
 ## Project structure
 

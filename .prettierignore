@@ -1,0 +1,9 @@
+dist/
+.output/
+.vinxi/
+.wrangler/
+node_modules/
+bun.lock
+src/routeTree.gen.ts
+scripts/verify-plugin-build.mjs
+README.md
