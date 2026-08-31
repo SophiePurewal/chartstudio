@@ -2,7 +2,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const root = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
 const dist = path.join(root, "dist");
 
 const requiredFiles = [
@@ -41,7 +44,10 @@ if (manifest.main !== "code.js" || manifest.ui !== "ui.html") {
   );
 }
 
-if (!Array.isArray(manifest.editorType) || !manifest.editorType.includes("figma")) {
+if (
+  !Array.isArray(manifest.editorType) ||
+  !manifest.editorType.includes("figma")
+) {
   fail("dist/manifest.json must declare Figma as an editor type");
 }
 
