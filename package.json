@@ -8,9 +8,14 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint .",
+    "test": "bun test",
     "format": "prettier --write .",
-    "build:plugin": "node scripts/build-figma-plugin.mjs"
+    "format:check": "prettier --check .",
+    "build:plugin": "node scripts/build-figma-plugin.mjs",
+    "verify:plugin": "node scripts/verify-plugin-build.mjs",
+    "check": "bun run format:check && bun run typecheck && bun run lint && bun run test && bun run build && bun run build:plugin && bun run verify:plugin"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.25.5",
