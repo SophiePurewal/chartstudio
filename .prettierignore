@@ -1,0 +1,6 @@
+dist/
+.output/
+.vinxi/
+.wrangler/
+node_modules/
+bun.lock
