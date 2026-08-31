@@ -4,3 +4,5 @@ dist/
 .wrangler/
 node_modules/
 bun.lock
+src/routeTree.gen.ts
+README.md
