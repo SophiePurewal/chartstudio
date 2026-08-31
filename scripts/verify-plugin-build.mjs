@@ -45,6 +45,17 @@ if (!Array.isArray(manifest.editorType) || !manifest.editorType.includes("figma"
   fail("dist/manifest.json must declare Figma as an editor type");
 }
 
+const allowedDomains = manifest.networkAccess?.allowedDomains;
+if (
+  !Array.isArray(allowedDomains) ||
+  allowedDomains.length !== 1 ||
+  allowedDomains[0] !== "none"
+) {
+  fail(
+    'dist/manifest.json must explicitly disable external network access with allowedDomains: ["none"]',
+  );
+}
+
 const html = await fs.readFile(path.join(dist, "ui.html"), "utf8");
 
 const forbiddenUiReferences = [
